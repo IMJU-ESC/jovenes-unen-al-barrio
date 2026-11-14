@@ -1,0 +1,48 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1794012585700,
+      "tag": "0000_next_thor_girl",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794013382809,
+      "tag": "0001_absurd_darkstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794016790703,
+      "tag": "0002_sharp_klaw",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794344378826,
+      "tag": "0003_large_loa",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794435420557,
+      "tag": "0004_employability_calendar",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794506951622,
+      "tag": "0005_nasty_the_fury",
+      "breakpoints": true
+    }
+  ]
+}
