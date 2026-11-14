@@ -53,3 +53,38 @@ migraciones y traslado seguro de datos. No es un sitio estático para GitHub Pag
 No incorporar exportaciones de la base de datos, archivos `.env`, `.dev.vars`, claves,
 tokens ni fotografías privadas al repositorio. Los registros operativos se respaldan
 por separado en almacenamiento privado.
+
+## Variante independiente sin servicios de pago
+
+Se añadió una variante estática React + API Worker para **Workers Free + D1 Free**.
+No utiliza R2, Cloudflare Images, Durable Objects ni servicios de correo/SMS de pago.
+No activar Workers Paid. El límite gratuito de D1 por base es 500 MB; el sistema
+reserva como máximo 200 MiB para fotos codificadas, dejando margen para registros e índices.
+Las fotos de perfil se comprimen a 100 KB y las evidencias a 200 KB antes de salir del navegador.
+El contador de almacenamiento se actualiza mediante triggers transaccionales; las cargas
+se rechazan al llenarse. El panel muestra el uso y permite descargar/eliminar evidencias.
+Una foto de perfil nueva libera el espacio de la anterior. No se admiten videos.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm build:free
+pnpm db:free:local
+pnpm preview:free
+```
+
+### Publicación pendiente de configurar en la cuenta propietaria
+
+1. Verificar Workers **Free** en la cuenta Cloudflare del IMJU, sin contratar productos.
+2. Crear una base D1 `jovenes-barrio`; sustituir el UUID de ejemplo en `wrangler.free.jsonc`.
+3. Aplicar migraciones con `pnpm db:free:remote`.
+4. Migrar registros y fotos de producción mediante un canal privado. Nunca subirlos a GitHub.
+5. Para una base nueva vacía, configurar el secreto `BOOTSTRAP_TOKEN` mediante Wrangler o el
+   dashboard, crear la cuenta maestra y retirar ese secreto. No publicar su valor.
+6. Ejecutar `pnpm build:free` y `pnpm deploy:free`, usando el subdominio gratuito workers.dev.
+7. Verificar acceso maestro y juvenil, fotos, asistencia QR y límites en el entorno real antes
+   de distribuir la nueva dirección o retirar la versión anterior.
+
+Los límites de uso se comparten con otras aplicaciones de la cuenta. En Free, alcanzar
+los límites puede suspender operaciones hasta que se restablezcan; no se promete servicio
+ilimitado. La preparación del código no implica que la cuenta ni el despliegue remoto estén
+configurados. El alojamiento original sigue activo hasta completar la migración.

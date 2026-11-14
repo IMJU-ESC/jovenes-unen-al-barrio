@@ -11,7 +11,12 @@
     "build": "node scripts/run-framework.mjs build",
     "start": "node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js dev --config dist/server/wrangler.json --local --persist-to .wrangler/state --ip 127.0.0.1 --inspector-port 0",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "build:free": "vite build --config vite.free.config.ts",
+    "preview:free": "wrangler dev --config wrangler.free.jsonc --local",
+    "deploy:free": "wrangler deploy --config wrangler.free.jsonc",
+    "db:free:local": "wrangler d1 migrations apply DB --local --config wrangler.free.jsonc",
+    "db:free:remote": "wrangler d1 migrations apply DB --remote --config wrangler.free.jsonc"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
