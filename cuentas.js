@@ -11,6 +11,12 @@ function realEmail(value){
 export function accountForms(auth,form,notice){
   auth.languageCode='es';
   function openSection(){
+    const coord=location.hash==='#coordinacion';
+    document.getElementById('coordHelp').hidden=!coord;
+    document.getElementById('register').hidden=coord;
+    document.getElementById('recovery').hidden=coord;
+    const username=document.getElementById('loginForm').elements.user;
+    if(coord)username.value='coordinacion';
     if(['#register','#recovery'].includes(location.hash)){
       const section=document.querySelector(location.hash);
       section.open=true;
