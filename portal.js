@@ -1,3 +1,4 @@
+import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js';
 import {manageRoster} from './padron.js';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut,updatePassword} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
@@ -21,13 +22,15 @@ function opts(xs,label){return xs.map(x=>'<option value="'+escape(x.id)+'">'+esc
 function snapshot(s){return s.docs.map(d=>({...d.data(),id:d.id}))}
 function sum(rs){return rs.reduce((n,r)=>n+(r.estado==='presente'?Number(r.horas):0),0)}
 function rowTable(rs){return '<div class="scroll"><table><thead><tr><th>Fecha</th><th>Participante</th><th>Actividad</th><th>Estado</th><th>Horas</th></tr></thead><tbody>'+rs.map(r=>'<tr>'+[r.fecha,people.find(p=>p.id===r.person)?.nombre,r.titulo,r.estado,r.horas].map(x=>'<td>'+escape(x)+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'}
-form('loginForm',async d=>{await signInWithEmailAndPassword(auth,d.user.trim().toLowerCase()+'@acceso.imju.invalid',d.pass);el('loginForm').reset()});
+accountForms(auth,form,notice);
+form('loginForm',async d=>{await signInWithEmailAndPassword(auth,d.user.trim().toLowerCase()+(d.user.includes('@')?'':'@acceso.imju.invalid'),d.pass);el('loginForm').reset()});
 el('logout').onclick=()=>action(()=>signOut(auth));
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopCamera()});
 onAuthStateChanged(auth,user=>{revision++;stopCamera();content.replaceChildren();people=[];activities=[];records=[];access=null;notice('');el('login').hidden=!!user;el('account').hidden=!user;if(user)action(()=>load(user))});
 async function load(user){
  const seq=++revision;stopCamera();const s=await getDoc(doc(db,'accesos',user.uid));if(seq!==revision)return;
- if(!s.exists()||!s.data().activo)throw Error('Solicita a coordinación la activación de tu cuenta.');
+ if(!s.exists()){awaitActivation({user,db,content,notice,action,refresh:()=>load(user)});return}
+ if(!s.data().activo)throw Error('Solicita a coordinación la activación de tu cuenta.');
  access=s.data();
  if(!access.listo){content.innerHTML='<form id="rotate"><h2>Elige tu contraseña personal</h2>'+field('Nueva contraseña (mínimo 10 caracteres)','a','password','minlength="10" autocomplete="new-password"')+field('Repite la contraseña','b','password','autocomplete="new-password"')+'<button>Guardar y entrar</button></form>';form('rotate',async d=>{if(d.a!==d.b)throw Error('Las contraseñas deben coincidir.');await updatePassword(user,d.a);await updateDoc(s.ref,{listo:true});await load(user)});return}
  const admin=access.participante==='ADMIN';
@@ -41,6 +44,8 @@ function draw(admin){
  content.innerHTML='<h2>'+escape(admin?'Panel de coordinación':people[0]?.nombre)+'</h2><label>Mes de consulta<input id="month" type="month" value="'+escape(selectedMonth)+'"></label><div class="metrics"><b>'+sum(rs)+' h acreditadas</b><b>'+rs.filter(r=>r.estado==='falta').length+' faltas</b></div>';
  el('month').onchange=e=>{if(e.target.value){selectedMonth=e.target.value;action(()=>load(auth.currentUser))}};
  if(admin)adminPanel(agenda,rs);else if(people[0])pass(people[0]);
+ linkEmail(auth.currentUser,content,form,notice);
+ if(admin)bindProfile(db,content,people,form,notice);
  content.insertAdjacentHTML('beforeend','<section class="card"><h3>Calendario</h3>'+ (agenda.map(a=>'<p><strong>'+escape(a.fecha)+' · '+escape(a.titulo)+'</strong><br>'+escape([a.hora,a.lugar,a.descripcion].filter(Boolean).join(' · '))+'</p>').join('')||'<p>Sin actividades este mes.</p>')+'</section><section class="card"><h3>Historial del mes</h3>'+rowTable(rs)+'</section>')
 }
 function pass(p){const qr=window.qrcode(0,'M');qr.addData('IMJU-JB:1:'+p.id);qr.make();const src=qr.createDataURL(8,32);content.insertAdjacentHTML('beforeend','<section class="card"><h3>Mi gafete digital</h3>'+(p.foto?'<img class="photo" alt="Mi fotografía" src="'+escape(p.foto)+'">':'')+'<p>'+escape(p.nombre)+' · '+escape(p.comunidad)+'</p><img class="qr" alt="QR individual de asistencia" src="'+src+'"><p><a href="'+src+'" download="gafete-qr.gif">Descargar mi QR</a></p></section>')}
