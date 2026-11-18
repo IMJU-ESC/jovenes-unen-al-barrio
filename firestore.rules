@@ -2,7 +2,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function admin() {
-      return request.auth != null && request.auth.uid == '36jBRapT5IOKncMJals27tiB0k32';
+      return request.auth != null && (request.auth.uid == '36jBRapT5IOKncMJals27tiB0k32'
+        || (request.auth.uid == 'mbagg6lUNZOMC2ql6CKX0tUyGTX2' && request.auth.token.email_verified == true && request.auth.token.email == 'imjuesc@gmail.com'));
     }
     function account() {
       return get(/databases/$(database)/documents/accesos/$(request.auth.uid)).data;
