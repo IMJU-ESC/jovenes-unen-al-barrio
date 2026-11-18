@@ -30,7 +30,23 @@ export function accountForms(auth,form,notice){
     notice('Si ese correo tiene una cuenta, recibirás un enlace. Revisa también el correo no deseado.');
   });
   form('signupForm',async({email,password})=>{
-    const {user}=await createUserWithEmailAndPassword(auth,realEmail(email),password);
+    const address=realEmail(email);
+    let credential;
+    try{credential=await createUserWithEmailAndPassword(auth,address,password)}
+    catch(error){
+      if(error.code!=='auth/email-already-in-use')throw error;
+      document.getElementById('signupForm').reset();
+      document.getElementById('register').open=false;
+      const login=document.getElementById('loginForm');
+      login.elements.user.value=address;
+      login.elements.pass.value='';
+      document.getElementById('resetForm').elements.email.value=address;
+      document.getElementById('recovery').open=true;
+      login.elements.pass.focus();
+      notice('Ese correo ya tiene cuenta. Ingresa con tu contraseña o pulsa «Enviar enlace de recuperación».');
+      return;
+    }
+    const {user}=credential;
     document.getElementById('signupForm').reset();
     await sendEmailVerification(user);
     notice('Enviamos un enlace de verificación a tu correo.');
@@ -82,7 +98,7 @@ export function linkEmail(user,root,form,notice){
   root.insertAdjacentHTML('beforeend','<details><summary>Vincular mi correo de recuperación</summary><form id="linkEmail"><label>Mi correo personal<input name="email" type="email" autocomplete="email" required></label><p>Después de confirmar el enlace en tu buzón, inicia sesión con ese correo y tu contraseña actual.</p><button>Verificar mi correo</button></form></details>');
   form('linkEmail',async({email})=>{
     try{await verifyBeforeUpdateEmail(user,realEmail(email))}
-    catch(e){if(e.code==='auth/requires-recent-login')throw Error('Cierra sesión y vuelve a entrar antes de vincular el correo.');throw e}
+    catch(e){if(e.code==='auth/email-already-in-use')throw Error('Ese correo ya tiene otra cuenta. Si es tuya, entra con ese correo y pide a coordinación que revise la vinculación de tu expediente.');if(e.code==='auth/requires-recent-login')throw Error('Cierra sesión y vuelve a entrar antes de vincular el correo.');throw e}
     notice('Revisa tu buzón y confirma el cambio. Después podrás recuperar tu contraseña con ese correo.');
   });
 }
