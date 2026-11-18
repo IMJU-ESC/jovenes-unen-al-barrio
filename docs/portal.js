@@ -1,4 +1,4 @@
-import {decode,imageCanvas,downloadBadge} from './credencial.js';
+import {decode,imageCanvas,renderBadge,saveBadge} from './credencial.js';
 import {saveRows} from './movimientos.js';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js';
 import {manageRoster} from './padron.js';
@@ -13,6 +13,7 @@ const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 const stamp=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Mazatlan'}).format(new Date());
 const content=el('content');
 let selectedMonth=stamp().slice(0,7),people=[],activities=[],records=[],access=null,stream=null,frame=0,revision=0;
+let profileId='', directoryQuery='';
 let page='inicio', cameraVersion=0, selectedEvent='',lastScan='',dirty=false;
 function stopCamera(){cameraVersion++;cancelAnimationFrame(frame);stream?.getTracks().forEach(t=>t.stop());stream=null}
 function notice(s){el('notice').textContent=s}
@@ -28,7 +29,7 @@ accountForms(auth,form,notice);
 form('loginForm',async d=>{await signInWithEmailAndPassword(auth,d.user.trim().toLowerCase()+(d.user.includes('@')?'':'@acceso.imju.invalid'),d.pass);el('loginForm').reset()});
 el('logout').onclick=()=>{if(guard())action(()=>signOut(auth))};
 
-onAuthStateChanged(auth,user=>{revision++;page='inicio';dirty=false;lastScan='';selectedEvent='';stopCamera();content.replaceChildren();people=[];activities=[];records=[];access=null;notice('');el('login').hidden=!!user;el('account').hidden=!user;if(user){content.innerHTML='<p role="status" class="card">Cargando tu panel…</p>';action(async()=>{try{await load(user)}catch(err){if(auth.currentUser?.uid===user.uid){content.innerHTML='<button id="retry">Volver a cargar mi panel</button>';el('retry').onclick=()=>action(()=>load(user))}throw err}})}});
+onAuthStateChanged(auth,user=>{revision++;page='inicio';profileId='';directoryQuery='';dirty=false;lastScan='';selectedEvent='';stopCamera();content.replaceChildren();people=[];activities=[];records=[];access=null;notice('');el('login').hidden=!!user;el('account').hidden=!user;if(user){content.innerHTML='<p role="status" class="card">Cargando tu panel…</p>';action(async()=>{try{await load(user)}catch(err){if(auth.currentUser?.uid===user.uid){content.innerHTML='<button id="retry">Volver a cargar mi panel</button>';el('retry').onclick=()=>action(()=>load(user))}throw err}})}});
 async function load(user){
  const seq=++revision;stopCamera();const s=await getDoc(doc(db,'accesos',user.uid));if(seq!==revision)return;
  if(!s.exists()){awaitActivation({user,db,content,notice,action,refresh:()=>load(user)});return}
@@ -54,6 +55,7 @@ function avatar(p){return p.foto?'<img class="avatar" src="'+escape(p.foto)+'" a
 function guard(){return !dirty||window.confirm('¿Salir y descartar los cambios pendientes?')}
 function navigate(next){
   if(next===page||!guard())return;
+  if(next==='padron')profileId='';
   dirty=false;page=next;notice('');draw(access.participante==='ADMIN');
   el('viewTitle').focus();window.scrollTo(0,0);
 }
@@ -100,31 +102,63 @@ function draw(admin){
 }
 function metric(value,label){return '<article class="metric"><strong>'+escape(value)+'</strong><span>'+label+'</span></article>'}
 function dashboard(view,admin,monthly){
-  const shortcuts=admin?[['qr','Escanear credenciales'],['lista','Pasar lista'],['padron','Ver directorio']]:[['gafete','Mostrar mi gafete'],['horas','Consultar mis horas']];
+  const shortcuts=admin?[['qr','Escanear credenciales'],['lista','Pasar lista'],['horas','Sumar horas'],['padron','Ver jóvenes']]:[['gafete','Mostrar mi gafete'],['horas','Consultar mis horas']];
   const activity=sum(records.filter(r=>r.categoria==='actividad')),learning=sum(records.filter(r=>r.categoria==='aprendizaje'));
   const metrics=(admin?metric(people.filter(p=>p.activo).length,'Jóvenes activos'):'')+metric(sum(records)+' h','Horas del mes')+metric(admin?activity+' h':activity+' / 80 h','Actividad')+metric(admin?learning+' h':learning+' / 10 h','Aprendizaje')+metric(records.filter(r=>r.estado==='falta').length,'Faltas injustificadas')+metric(records.filter(r=>r.estado==='justificada').length,'Faltas justificadas');
   view.innerHTML='<div class="welcome"><div><h3>'+escape(admin?'Participación del mes':people[0]?.nombre||'Mi participación')+'</h3><div class="quick">'+shortcuts.map(([p,t])=>'<button data-open="'+p+'">'+t+' ↗</button>').join('')+'</div></div><img src="./patio.webp" alt=""></div><div class="metrics">'+metrics+'</div><section class="card"><h3>Agenda del mes</h3>'+agendaList(monthly.slice(0,4))+'</section>';
-  view.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>navigate(b.dataset.open));
+  view.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{navigate(b.dataset.open);if(b.dataset.open==='horas'&&admin)openManual()});
 }
 function agendaList(list){
   return list.length?list.map(a=>'<article class="event"><time datetime="'+escape(a.fecha)+'"><b>'+escape(a.fecha.slice(8))+'</b>'+escape(new Date(a.fecha+'T12:00:00').toLocaleString('es-MX',{month:'short'}))+'</time><div><strong>'+escape(a.titulo)+'</strong><p>'+escape([a.hora,a.lugar,a.categoria,a.horas+' h'].filter(Boolean).join(' · '))+'</p>'+(a.descripcion?'<p>'+escape(a.descripcion)+'</p>':'')+'</div></article>').join(''):'<p class="empty">Sin actividades programadas en este mes.</p>';
 }
-function badge(view,p){
+function badge(view,p,showFields=true){
   const qr=window.qrcode(0,'M');qr.addData('IMJU-JB:1:'+p.id);qr.make();const url=qr.createDataURL(10,40);
-  view.innerHTML='<article class="badge"><div class="band">Jóvenes que Unen al Barrio <span>Escuinapa</span></div><div class="badge-main">'+avatar(p)+'<h3>'+escape(p.nombre)+'</h3><p>'+escape([p.comunidad,p.generacion].filter(Boolean).join(' · '))+'</p><img class="qr" alt="QR personal de asistencia" src="'+url+'"></div></article><div class="quick"><button id="badgeSave">Guardar gafete en mi celular</button><a class="action-link" href="'+url+'" download="QR-IMJU.gif">Descargar solo el QR</a></div><p>La imagen guardada se puede mostrar sin conexión.</p><section class="card"><h3>Mi expediente</h3>'+personFields(p)+'</section>';
-  el('badgeSave').onclick=e=>action(()=>downloadBadge(p,url),e.currentTarget);
+  view.innerHTML='<section class="gafete-panel"><div class="gafete-preview" aria-live="polite">Preparando la credencial…</div><div class="gafete-actions"><h3>Credencial individual</h3><p>Gafete de 8.5 × 11.5 cm con espacio para el sello. Imprime el PDF en hoja carta al 100 % y recorta por las marcas.</p><button class="pdf" disabled>Descargar PDF para imprimir</button><button class="png light" disabled>Guardar imagen para celular</button><a class="action-link" href="'+url+'" download="QR-IMJU.gif">Descargar solo el QR</a></div></section>'+(showFields?'<section class="card"><h3>Mi expediente</h3>'+personFields(p)+'</section>':'');
+  const preview=view.querySelector('.gafete-preview'),pdf=view.querySelector('.pdf'),png=view.querySelector('.png');
+  renderBadge(p,url).then(canvas=>{
+    if(!preview.isConnected)return;
+    canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Credencial de '+p.nombre+' · '+p.usuario+' con QR y espacio para sello');
+    preview.replaceChildren(canvas);
+    for(const [button,format] of [[pdf,'pdf'],[png,'png']]){
+      button.disabled=false;button.onclick=()=>action(()=>saveBadge(canvas,p,format),button);
+    }
+  }).catch(()=>{if(preview.isConnected)preview.textContent='No se pudo cargar la credencial. Actualiza la página para volver a intentarlo.'});
+}
+function openManual(person){
+  const f=el('manual');if(!f)return;
+  if(person)f.elements.person.value=person;
+  f.closest('details').open=true;f.scrollIntoView({block:'center'});f.elements.hours.focus();
 }
 function personFields(p){return '<dl>'+[['Comunidad',p.comunidad],['Generación',p.generacion],['Teléfono',p.telefono],['Dependencia',p.dependencia],['Usuario',p.usuario],['Estado',p.activo?'Activo':'Inactivo']].map(([k,v])=>'<div><dt>'+k+'</dt><dd>'+escape(v||'Pendiente')+'</dd></div>').join('')+'</dl>'}
 function directory(view,reload){
-  view.innerHTML='<label>Buscar joven<input type="search" id="findPerson" placeholder="Nombre, usuario o comunidad"></label><div id="cards" class="people-grid"></div><div id="rosterTools"></div>';
-  const editor=el('rosterTools');manageRoster(editor,{app,db,people,reload,onError:report});
-  const fold=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
-  function filter(){
-    const matches=people.filter(p=>fold([p.nombre,p.usuario,p.comunidad].join(' ')).includes(fold(el('findPerson').value)));
-    el('cards').innerHTML=matches.map(p=>'<details class="person"><summary>'+avatar(p)+'<span><strong>'+escape(p.nombre)+'</strong><small>'+escape(p.comunidad||'Comunidad pendiente')+' · '+sum(records.filter(r=>r.person===p.id))+' h</small></span></summary>'+personFields(p)+'<button data-edit="'+escape(p.id)+'">Editar expediente</button></details>').join('')||'<p>No se encontraron participantes.</p>';
-    el('cards').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const select=editor.querySelector('select');select.closest('details').open=true;select.value=b.dataset.edit;select.dispatchEvent(new Event('change'));select.scrollIntoView({block:'center'});select.focus()});
+  const person=people.find(p=>p.id===profileId);
+  if(person){
+    view.innerHTML='<button class="light" id="backDirectory">← Volver al directorio</button><section class="profile-head">'+avatar(person)+'<div><h3>'+escape(person.nombre)+'</h3><p>Usuario del padrón · <strong>'+escape(person.usuario)+'</strong></p></div></section><div class="quick profile-controls"><button id="profileEdit">Editar expediente</button><button id="profileHours" '+(person.activo?'':'disabled')+'>Sumar horas</button><button class="light" data-task="qr">Escanear QR</button><button class="light" data-task="lista">Pasar lista</button></div><section class="card"><h3>Datos del joven</h3>'+personFields(person)+'<p><strong>'+sum(records.filter(r=>r.person===person.id))+' h</strong> acreditadas en el mes seleccionado</p></section><div id="profileBadge"></div><section id="profileEditor" hidden></section>';
+    badge(el('profileBadge'),person,false);
+    const editor=el('profileEditor');
+    el('profileEdit').onclick=()=>{
+      if(!editor.childElementCount)manageRoster(editor,{app,db,people:[person],reload,onError:report,editOnly:true});
+      editor.hidden=false;editor.querySelector('details').open=true;editor.scrollIntoView({block:'center'});editor.querySelector('input[name=nombre]').focus();
+      editor.oninput=()=>{dirty=true};
+    };
+    el('profileHours').onclick=()=>{navigate('horas');if(page==='horas')openManual(person.id)};
+    view.querySelectorAll('[data-task]').forEach(b=>b.onclick=()=>navigate(b.dataset.task));
+    el('backDirectory').onclick=()=>{if(!guard())return;dirty=false;profileId='';draw(true);el('findPerson').focus()};
+    return;
   }
-  filter();el('findPerson').oninput=filter;
+  view.innerHTML='<label>Buscar joven<input type="search" id="findPerson" placeholder="Nombre, usuario o comunidad"></label><div id="cards" class="people-grid"></div><div id="rosterTools"></div>';
+  manageRoster(el('rosterTools'),{app,db,people,reload,onError:report,createOnly:true});
+  const fold=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const search=el('findPerson');search.value=directoryQuery;
+  function filter(){
+    directoryQuery=search.value;
+    const matches=people.filter(p=>fold([p.nombre,p.usuario,p.comunidad].join(' ')).includes(fold(directoryQuery)));
+    el('cards').innerHTML=matches.map(p=>'<button type="button" class="directory-person" data-person="'+escape(p.id)+'">'+avatar(p)+'<span><strong>'+escape(p.nombre)+'</strong><small>Usuario · '+escape(p.usuario)+'</small><small>'+escape(p.comunidad||'Comunidad pendiente')+' · '+sum(records.filter(r=>r.person===p.id))+' h</small></span><b aria-hidden="true">›</b></button>').join('')||'<p>No se encontraron participantes.</p>';
+    el('cards').querySelectorAll('[data-person]').forEach(b=>b.onclick=()=>{
+      if(!guard())return;dirty=false;profileId=b.dataset.person;draw(true);el('backDirectory').focus();window.scrollTo(0,0);
+    });
+  }
+  filter();search.oninput=filter;
 }
 function activityInputs(){
   return field('Nombre de la actividad','title')+field('Fecha','date','date')+'<label>Hora<input name="time" type="time"></label><label>Lugar<input name="place"></label>'+select('Tipo de horas','category',categories)+field('Horas por joven','hours','number','min="0" max="24" step="1"')+'<label>Descripción<textarea name="description"></textarea></label>';
@@ -168,6 +202,11 @@ function attendanceView(view,monthly,reload,scanner){
   const a=options.find(a=>a.id===selectedEvent),root=el('sessionTools');
   if(!a){root.textContent=options.length?'Selecciona la actividad que vas a registrar.':'Sin actividades para registrar hasta hoy en el mes elegido.';return}
   root.innerHTML='<div class="session-target"><strong>'+escape(a.titulo)+'</strong><p>'+escape([fullDate(a.fecha),a.horas+' h',a.categoria,a.lugar].filter(Boolean).join(' · '))+'</p></div>';
+  const changeMode=document.createElement('button');
+  changeMode.className='light';changeMode.type='button';
+  changeMode.textContent=scanner?'Pasar lista para esta actividad':'Escanear QR para esta actividad';
+  changeMode.onclick=()=>navigate(scanner?'lista':'qr');
+  root.querySelector('.session-target').append(changeMode);
   if(scanner)scannerTools(root,a,reload);else roster(root,a,reload);
 }
 function attendanceRow(a,status,hours,note){
