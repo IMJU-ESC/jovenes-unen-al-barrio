@@ -42,11 +42,13 @@ export async function saveRows(db,changes,activity=null,scan=false){
   return runTransaction(db,async tx=>{
     if(activity){
       const latest=(await tx.get(doc(db,'actividades',activity.id))).data();
+      if(scan==='cierre'&&latest?.listaCerrada)return [];
       if(!latest||['fecha','horas','categoria','titulo'].some(k=>latest[k]!==activity[k]))throw Error('La actividad cambió. Actualiza el panel antes de registrar.');
     }
     const plans=await Promise.all(changes.map(async c=>{
       const person=doc(db,'participantes',c.person), record=doc(collection(person,'registros'),c.id);
       const [profile,current]=await Promise.all([tx.get(person),tx.get(record)]);
+      if(scan==='cierre'&&(!profile.exists()||!profile.data().activo||profile.data().muestra||profile.data().fechaAlta>activity.fecha))return {omitido:true};
       if(!profile.exists()||(!profile.data().activo&&!c.prior))throw Error('Participante inactivo o sin expediente.');
       const old=current.data();
       if(scan&&old)return {existing:old};
@@ -67,7 +69,7 @@ export async function saveRows(db,changes,activity=null,scan=false){
       return {person,record,next:c.next,estado:estadoAsistencia(data,meses)};
     }));
     for(const p of plans){
-      if(p.existing)continue;
+      if(p.existing||p.omitido)continue;
       if(p.next)tx.set(p.record,p.next,{merge:true});else tx.delete(p.record);
       tx.update(p.person,{...p.estado,revisionHoras:increment(1)});
     }
