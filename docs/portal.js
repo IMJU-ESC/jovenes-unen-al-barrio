@@ -1,3 +1,4 @@
+import {icon,navigation} from './navegacion.js';
 import {decode,imageCanvas,renderBadge,saveBadge} from './credencial.js';
 import {saveRows} from './movimientos.js';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js';
@@ -44,8 +45,8 @@ async function load(user){
 }
 function downloadCsv(rs){const quote=v=>{let s=String(v??'');if(/^[=+@\-\t\r]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"'};const head=['joven','usuario','comunidad','generacion','telefono','dependencia','actividad','tipo_horas','fecha','asistencia','horas','total_actividades_de_80','total_aprendizaje_de_10','total_programa_de_90','observaciones'];const data=rs.map(r=>{const p=people.find(p=>p.id===r.person);return [p.nombre,p.usuario,p.comunidad,p.generacion,p.telefono,p.dependencia,r.titulo,r.categoria,r.fecha,r.tipo==='manual'?'asignacion_manual':r.estado,r.horas,...['actividad','aprendizaje'].map(c=>sum(rs.filter(x=>x.person===r.person&&x.categoria===c))),sum(rs.filter(x=>x.person===r.person)),r.nota||(r.tipo==='manual'?r.titulo:'')]});const blob=new Blob(['\ufeff'+[head,...data].map(r=>r.map(quote).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='IMJU-'+selectedMonth+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(link.href),5000)}
 
-const adminPages={inicio:'Resumen',qr:'Escanear QR',lista:'Pasar lista',padron:'Directorio',agenda:'Actividades',horas:'Horas e historial',cuenta:'Accesos'};
-const memberPages={inicio:'Resumen',gafete:'Mi gafete',agenda:'Calendario',horas:'Mis horas',cuenta:'Mi cuenta'};
+const adminPages={inicio:'Inicio',qr:'Escanear QR',lista:'Pasar lista',padron:'Directorio de jóvenes',agenda:'Actividades',horas:'Horas e historial',cuenta:'Accesos'};
+const memberPages={inicio:'Inicio',gafete:'Mi gafete',agenda:'Calendario',horas:'Mis horas',cuenta:'Mi cuenta'};
 const categories='<option value="actividad">Actividad</option><option value="aprendizaje">Aprendizaje</option>';
 const states='<option value="presente">Presente</option><option value="justificada">Falta justificada</option><option value="falta">Falta injustificada</option>';
 const labelState=s=>({presente:'Presente',falta:'Falta injustificada',justificada:'Falta justificada'})[s]||s;
@@ -54,31 +55,35 @@ const fullDate=d=>new Date(d+'T12:00:00').toLocaleDateString('es-MX',{day:'numer
 function avatar(p){return p.foto?'<img class="avatar" src="'+escape(p.foto)+'" alt="">':'<span class="avatar fallback">'+escape(initials(p.nombre))+'</span>'}
 function guard(){return !dirty||window.confirm('¿Salir y descartar los cambios pendientes?')}
 function navigate(next){
-  if(next===page||!guard())return;
+  if(next===page){const menu=content.querySelector('.nav-more');if(menu)menu.open=false;return}
+  if(!guard())return;
   if(next==='padron')profileId='';
   dirty=false;page=next;notice('');draw(access.participante==='ADMIN');
   el('viewTitle').focus();window.scrollTo(0,0);
 }
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue=''}});
+document.addEventListener('click',e=>{
+  const menu=content.querySelector('.nav-more[open]');
+  if(menu&&!menu.contains(e.target))menu.open=false;
+});
+document.addEventListener('keydown',e=>{
+  const menu=content.querySelector('.nav-more[open]');
+  if(menu&&e.key==='Escape'){menu.open=false;menu.querySelector('summary').focus()}
+});
 function draw(admin){
   stopCamera();
   const pages=admin?adminPages:memberPages;
   if(!(page in pages))page='inicio';
   const monthly=activities.filter(a=>a.fecha?.startsWith(selectedMonth));
-  content.innerHTML='<div class="desk"><nav aria-label="Secciones del portal"><strong>Jóvenes que<br><em>unen al barrio.</em></strong>'+Object.entries(pages).map(([id,title])=>'<button type="button" data-page="'+id+'" '+(id===page?'aria-current="page"':'')+'>'+title+'</button>').join('')+'</nav><section class="workspace"><div class="view-head"><div><p class="kicker">'+(admin?'Panel de coordinación':'Mi participación')+'</p><h2 id="viewTitle" tabindex="-1">'+pages[page]+'</h2></div><label class="month">Mes de consulta<input id="month" type="month" value="'+escape(selectedMonth)+'"></label></div><div id="view"></div></section></div>';
+  const monthControl=['cuenta','gafete'].includes(page)?'':'<label class="month">Mes de consulta<input id="month" type="month" value="'+escape(selectedMonth)+'"></label>';
+  content.innerHTML='<div class="desk">'+navigation(pages,page,admin)+'<section class="workspace"><div class="view-head"><div><p class="kicker">'+(admin?'Coordinación · IMJU':'Mi participación · IMJU')+'</p><h2 id="viewTitle" tabindex="-1">'+pages[page]+'</h2></div>'+monthControl+'</div><div id="view"></div></section></div>';
   content.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
-  el('month').onchange=e=>{
+  if(el('month'))el('month').onchange=e=>{
     const value=e.target.value;
     if(!value||!guard()){e.target.value=selectedMonth;return}
     dirty=false;selectedMonth=value;selectedEvent='';lastScan='';
     action(async()=>{await load(auth.currentUser)});
   };
-  const mobile=document.createElement('label');
-  mobile.className='mobile-nav';mobile.textContent='Ir a sección';
-  const destination=document.createElement('select');
-  for(const [id,title] of Object.entries(pages))destination.add(new Option(title,id,false,id===page));
-  destination.onchange=()=>{navigate(destination.value);destination.value=page};
-  mobile.append(destination);content.querySelector('nav').after(mobile);
   const view=el('view'), reload=async message=>{dirty=false;await load(auth.currentUser);notice(message)};
   if(page==='inicio')dashboard(view,admin,monthly);
   if(page==='gafete'&&people[0])badge(view,people[0]);
@@ -102,10 +107,15 @@ function draw(admin){
 }
 function metric(value,label){return '<article class="metric"><strong>'+escape(value)+'</strong><span>'+label+'</span></article>'}
 function dashboard(view,admin,monthly){
-  const shortcuts=admin?[['qr','Escanear credenciales'],['lista','Pasar lista'],['horas','Sumar horas'],['padron','Ver jóvenes']]:[['gafete','Mostrar mi gafete'],['horas','Consultar mis horas']];
+  const mainTask=admin?'qr':'gafete';
+  const shortcuts=admin?[['lista','Pasar lista'],['padron','Buscar joven'],['horas','Sumar horas']]:[['horas','Ver mis horas'],['agenda','Ver calendario']];
   const activity=sum(records.filter(r=>r.categoria==='actividad')),learning=sum(records.filter(r=>r.categoria==='aprendizaje'));
-  const metrics=(admin?metric(people.filter(p=>p.activo).length,'Jóvenes activos'):'')+metric(sum(records)+' h','Horas del mes')+metric(admin?activity+' h':activity+' / 80 h','Actividad')+metric(admin?learning+' h':learning+' / 10 h','Aprendizaje')+metric(records.filter(r=>r.estado==='falta').length,'Faltas injustificadas')+metric(records.filter(r=>r.estado==='justificada').length,'Faltas justificadas');
-  view.innerHTML='<div class="welcome"><div><h3>'+escape(admin?'Participación del mes':people[0]?.nombre||'Mi participación')+'</h3><div class="quick">'+shortcuts.map(([p,t])=>'<button data-open="'+p+'">'+t+' ↗</button>').join('')+'</div></div><img src="./patio.webp" alt=""></div><div class="metrics">'+metrics+'</div><section class="card"><h3>Agenda del mes</h3>'+agendaList(monthly.slice(0,4))+'</section>';
+  const upcoming=monthly.filter(a=>a.fecha>=stamp());
+  const hero='<section class="task-hero"><div><h3>'+escape(admin?'Registro de asistencia':people[0]?.nombre||'Mi participación')+'</h3><p>'+(admin?'Escanea el gafete de cada joven al llegar a la actividad.':'Ten tu credencial a la mano para registrar tu asistencia.')+'</p><button data-open="'+mainTask+'">'+icon(mainTask)+(admin?'Escanear gafete':'Mostrar mi gafete')+'</button></div><img src="./patio.webp" alt=""></section>';
+  const actions='<div class="task-grid">'+shortcuts.map(([id,label])=>'<button data-open="'+id+'"><span class="task-icon">'+icon(id)+'</span>'+label+icon('flecha')+'</button>').join('')+'</div>';
+  const metrics=(admin?metric(people.filter(p=>p.activo).length,'Jóvenes activos'):'')+metric(sum(records)+' h','Horas acreditadas')+metric(activity+' h','Actividad')+metric(learning+' h','Aprendizaje');
+  const absences=records.filter(r=>r.estado==='falta').length+' injustificadas · '+records.filter(r=>r.estado==='justificada').length+' justificadas';
+  view.innerHTML=hero+actions+'<div class="overview"><section class="card totals"><h3>Balance del mes</h3><div class="metrics">'+metrics+'</div><p class="absence">Faltas · '+absences+'</p></section><section class="card"><h3>Próximas actividades</h3>'+(upcoming.length?agendaList(upcoming.slice(0,3)):'<p class="empty">Sin actividades pendientes en el mes seleccionado.</p>')+'<button class="text-button" data-open="agenda">Ver calendario completo '+icon('flecha')+'</button></section></div>';
   view.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{navigate(b.dataset.open);if(b.dataset.open==='horas'&&admin)openManual()});
 }
 function agendaList(list){
