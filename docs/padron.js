@@ -149,7 +149,7 @@ async function alta(app,db,name,password,data){
           if(access.data()?.participante===uid&&person.data()?.usuario===name)return;
           throw Error('Ese usuario ya tiene otro expediente.');
         }
-        tx.set(personRef,{...data,usuario:name,activo:true,faltasPorMes:{},bajaPorFaltas:false});
+        tx.set(personRef,{...data,usuario:name,fechaAlta:new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Mazatlan'}).format(new Date()),activo:true,faltasPorMes:{},bajaPorFaltas:false});
         tx.set(ref,{participante:uid,activo:true,listo:false});
       });
     }finally{await deleteApp(secondary)}

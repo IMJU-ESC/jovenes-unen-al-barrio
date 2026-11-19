@@ -39,6 +39,15 @@ async function load(user){
  if(!access.listo){content.innerHTML='<form id="rotate"><h2>Elige tu contraseña personal</h2>'+field('Nueva contraseña (mínimo 10 caracteres)','a','password','minlength="10" autocomplete="new-password"')+field('Repite la contraseña','b','password','autocomplete="new-password"')+'<button>Guardar y entrar</button></form>';form('rotate',async d=>{if(d.a!==d.b)throw Error('Las contraseñas deben coincidir.');await updatePassword(user,d.a);await updateDoc(s.ref,{listo:true});await load(user)});return}
  const admin=access.participante==='ADMIN';
  const [list,agenda]=await Promise.all([admin?getDocs(collection(db,'participantes')).then(snapshot):getDoc(doc(db,'participantes',access.participante)).then(d=>d.exists()?[{...d.data(),id:d.id}]:[]),getDocs(collection(db,'actividades')).then(snapshot)]);
+ if(seq!==revision)return;
+ if(admin){
+   const vencidas=agenda.filter(a=>!a.listaCerrada&&a.fecha<stamp()&&(a.cierreAutomatico||a.fecha>='2026-11-19')).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+   for(const a of vencidas){
+     if(seq!==revision)return;
+     await cerrarLista(a,list);a.listaCerrada=true;
+   }
+   if(vencidas.length)list.splice(0,list.length,...snapshot(await getDocsFromServer(collection(db,'participantes'))));
+ }
  const visibles=admin?list.filter(p=>!p.muestra):list;
  const rows=(await Promise.all(visibles.map(async p=>snapshot(await getDocs(query(collection(db,'participantes',p.id,'registros'),where('fecha','>=',selectedMonth+'-01'),where('fecha','<=',selectedMonth+'-31')))).map(r=>({...r,person:p.id}))))).flat();
  if(seq!==revision)return;
@@ -51,8 +60,8 @@ function downloadCsv(rs){const quote=v=>{let s=String(v??'');if(/^[=+@\-\t\r]/.t
 const adminPages={inicio:'Inicio',qr:'Escanear QR',lista:'Pasar lista',padron:'Directorio de jóvenes',agenda:'Actividades',horas:'Horas e historial',cuenta:'Accesos'};
 const memberPages={inicio:'Inicio',gafete:'Mi gafete',agenda:'Calendario',horas:'Mis horas',cuenta:'Mi cuenta'};
 const categories='<option value="actividad">Actividad</option><option value="aprendizaje">Aprendizaje</option>';
-const states='<option value="presente">Presente</option><option value="justificada">Falta justificada</option><option value="falta">Falta injustificada</option>';
-const labelState=s=>({presente:'Presente',falta:'Falta injustificada',justificada:'Falta justificada'})[s]||s;
+const states='<option value="presente">Presente</option><option value="justificada">Falta justificada</option><option value="falta">Falta injustificada</option><option value="no_aplica">No aplica</option>';
+const labelState=s=>({presente:'Presente',falta:'Falta injustificada',justificada:'Falta justificada',no_aplica:'No aplica'})[s]||s;
 const initials=s=>s.trim().split(/\s+/).slice(0,2).map(n=>n[0]).join('');
 const fullDate=d=>new Date(d+'T12:00:00').toLocaleDateString('es-MX',{day:'numeric',month:'long'});
 function avatar(p){return p.foto?'<img class="avatar" src="'+escape(p.foto)+'" alt="">':'<span class="avatar fallback">'+escape(initials(p.nombre))+'</span>'}
@@ -154,10 +163,58 @@ function openManual(person){
   f.closest('details').open=true;f.scrollIntoView({block:'center'});f.elements.hours.focus();
 }
 function personFields(p){return '<dl>'+[['Comunidad',p.comunidad],['Generación',p.generacion],['Teléfono',p.telefono],['Dependencia',p.dependencia],...([['Tipo de teléfono',p.tipoTelefono],['Clave de origen',p.claveLocal],['Categoría del padrón',p.categoriaPadron],['Domicilio',p.domicilio],['Colonia',p.colonia]].filter(([,v])=>v)),['Usuario',p.usuario],['Estado',p.bajaPorFaltas?'Baja por faltas':p.activo?'Activo':'Inactivo'],['Faltas injustificadas · '+selectedMonth,String(p.faltasPorMes?.[selectedMonth]||0)]].map(([k,v])=>'<div><dt>'+k+'</dt><dd>'+escape(v||'Pendiente')+'</dd></div>').join('')+'</dl>'}
+function convocado(p,a){return p.activo&&!p.muestra&&(!p.fechaAlta||p.fechaAlta<=a.fecha)}
+async function cerrarLista(a,list){
+  const candidatos=list.filter(p=>convocado(p,a));
+  for(let i=0;i<candidatos.length;i+=8){
+    const changes=candidatos.slice(i,i+8).map(p=>({person:p.id,id:a.id,prior:null,next:attendanceRow(a,'falta',0,'Sin registro al cierre de la actividad.')}));
+    await saveRows(db,changes,a,'cierre');
+  }
+  const ref=doc(db,'actividades',a.id);
+  await runTransaction(db,async tx=>{
+    const current=(await tx.get(ref)).data();
+    if(!current||current.fecha!==a.fecha)throw Error('La actividad cambió. Actualiza el panel.');
+    if(!current.listaCerrada)tx.update(ref,{listaCerrada:true});
+  });
+}
+function actividadesDelPerfil(root,p,reload){
+  const porEvento=new Map(records.filter(r=>r.person===p.id&&r.tipo!=='manual').map(r=>[r.id,r]));
+  const eventos=activities.filter(a=>a.fecha.startsWith(selectedMonth)&&(porEvento.has(a.id)||(!a.listaCerrada&&convocado(p,a))));
+  const pendientes=eventos.filter(a=>!porEvento.has(a.id));
+  root.innerHTML='<h3>Actividades pendientes · '+pendientes.length+'</h3>';
+  if(!pendientes.length)root.insertAdjacentHTML('beforeend','<p>No hay actividades pendientes en el mes seleccionado.</p>');
+  const anteriores=document.createElement('details');
+  anteriores.innerHTML='<summary>Ver registros del mes</summary>';
+  for(const a of eventos){
+    const previo=porEvento.get(a.id),row=document.createElement('article');row.className='event';
+    row.innerHTML='<div><strong>'+escape(a.titulo)+'</strong><p>'+escape(fullDate(a.fecha))+' · '+escape(previo?labelState(previo.estado):'Sin registrar')+'</p><button class="light">'+(previo?'Corregir':'Registrar')+'</button></div>';
+    (previo?anteriores:root).append(row);
+    row.querySelector('button').onclick=e=>action(async()=>{
+      const futuro=a.fecha>stamp();
+      const opciones=futuro?'<option value="no_aplica">No aplica</option>':'<option value="">Elige un estado</option>'+states;
+      const datos=solicitar(root,'Registro individual','<p>'+escape(p.nombre)+' · '+escape(a.titulo)+' · '+escape(fullDate(a.fecha))+'</p><label>Asistencia<select name="estado" required>'+opciones+'</select></label><label><span class="nota-label">Observaciones</span><input name="note" maxlength="240"></label>'+adjunto,'Guardar registro',async f=>{
+        const state=f.elements.estado.value,note=f.elements.note.value.trim();
+        if(state==='justificada'&&!note)throw Error('Escribe la razón de la falta.');
+        const next=attendanceRow(a,state,previo?.estado==='presente'?previo.horas:a.horas,note);
+        next.evidencia=state==='justificada'?await evidencia(f.elements.evidencia,previo?.evidencia):'';
+        return next;
+      });
+      const f=root.querySelector('dialog form');
+      if(previo&&!futuro)f.elements.estado.value=previo.estado;
+      f.elements.note.value=previo?.nota==='Sin registro al cierre de la actividad.'?'':previo?.nota||'';
+      f.elements.estado.onchange=()=>ajustarJustificante(f,f.elements.estado.value);f.elements.estado.onchange();
+      const next=await datos;if(!next)return;
+      await saveRows(db,[{person:p.id,id:a.id,prior:previo,next}],a);
+      await reload('Registro guardado · '+labelState(next.estado));
+    },e.currentTarget);
+  }
+  if(eventos.length>pendientes.length)root.append(anteriores);
+}
 function directory(view,reload){
   const person=people.find(p=>p.id===profileId);
   if(person){
-    view.innerHTML='<button class="light" id="backDirectory">← Volver al directorio</button><section class="profile-head">'+avatar(person)+'<div><h3>'+escape(person.nombre)+'</h3><p>Usuario del padrón · <strong>'+escape(person.usuario)+'</strong></p></div></section><div class="quick profile-controls"><button id="profileEdit">Editar expediente</button><button class="light" id="profileAccess" '+(person.activo?'':'disabled')+'>Recuperar acceso</button><button id="profileHours" '+(person.activo?'':'disabled')+'>Sumar horas</button><button class="light" data-task="qr">Escanear QR</button><button class="light" data-task="lista">Pasar lista</button></div><section class="card"><h3>Datos del joven</h3>'+personFields(person)+'<p><strong>'+sum(records.filter(r=>r.person===person.id))+' h</strong> acreditadas en el mes seleccionado</p></section><div id="profileBadge"></div><section id="profileEditor" hidden></section>';
+    view.innerHTML='<button class="light" id="backDirectory">← Volver al directorio</button><section class="profile-head">'+avatar(person)+'<div><h3>'+escape(person.nombre)+'</h3><p>Usuario del padrón · <strong>'+escape(person.usuario)+'</strong></p></div></section><div class="quick profile-controls"><button id="profileEdit">Editar expediente</button><button class="light" id="profileAccess" '+(person.activo?'':'disabled')+'>Recuperar acceso</button><button id="profileHours" '+(person.activo?'':'disabled')+'>Sumar horas</button><button class="light" data-task="qr">Escanear QR</button><button class="light" data-task="lista">Pasar lista</button></div><section id="perfilAsistencia" class="card"></section><section class="card"><h3>Datos del joven</h3>'+personFields(person)+'<p><strong>'+sum(records.filter(r=>r.person===person.id))+' h</strong> acreditadas en el mes seleccionado</p></section><div id="profileBadge"></div><section id="profileEditor" hidden></section>';
+    actividadesDelPerfil(el('perfilAsistencia'),person,reload);
     badge(el('profileBadge'),person,false);
     const editor=el('profileEditor');
     el('profileEdit').onclick=()=>{
@@ -208,7 +265,7 @@ function calendar(view,monthly,admin,reload){
   if(admin){
     view.innerHTML='<details><summary>Crear actividad</summary><form id="newact">'+activityInputs()+'<button>Publicar actividad</button></form></details>';
     el('newact').elements.date.value=stamp();
-    form('newact',async d=>{await setDoc(doc(collection(db,'actividades')),activityData(d));selectedMonth=d.date.slice(0,7);await reload('Actividad publicada.')});
+    form('newact',async d=>{await setDoc(doc(collection(db,'actividades')),{...activityData(d),cierreAutomatico:true});selectedMonth=d.date.slice(0,7);await reload('Actividad publicada.')});
   }
   for(const a of monthly){
     const item=document.createElement('section');item.className='card';item.innerHTML=agendaList([a]);view.append(item);
@@ -247,6 +304,15 @@ function attendanceView(view,monthly,reload,scanner){
   changeMode.textContent=scanner?'Pasar lista para esta actividad':'Escanear QR para esta actividad';
   changeMode.onclick=()=>navigate(scanner?'lista':'qr');
   root.querySelector('.session-target').append(changeMode);
+  if(!a.listaCerrada){
+    const close=document.createElement('button');close.className='light';close.textContent='Cerrar lista';
+    close.onclick=()=>action(async()=>{
+      if(!guard()||!confirm('¿Cerrar '+a.titulo+'? Cada participante activo pendiente recibirá una falta injustificada. Revisa primero a quién corresponde No aplica.'))return;
+      await cerrarLista(a,people);await reload('Lista cerrada. Se registraron las faltas pendientes.');
+    },close);
+    root.querySelector('.session-target').append(close);
+    if(a.cierreAutomatico||a.fecha>='2026-11-19')root.querySelector('.session-target').insertAdjacentHTML('beforeend','<p>Los pendientes pasan a falta al cerrar la lista o cuando coordinación vuelva a cargar el panel después del día del evento.</p>');
+  }else root.querySelector('.session-target').insertAdjacentHTML('beforeend','<p>Lista cerrada · Puedes corregir los registros desde el perfil.</p>');
   if(scanner){scannerTools(root,a,reload);pendingAttendance(root,a,reload)}else roster(root,a,reload);
 }
 // Las decisiones se resuelven al pulsar un botón, cancelar o abandonar la vista.
@@ -296,14 +362,14 @@ function ajustarJustificante(row,state){
 }
 function pendingAttendance(root,a,reload){
   const saved=new Set(records.filter(r=>r.id===a.id).map(r=>r.person));
-  const pending=people.filter(p=>p.activo&&!saved.has(p.id));
+  const pending=people.filter(p=>!a.listaCerrada&&convocado(p,a)&&!saved.has(p.id));
   const section=document.createElement('section');
   section.className='scan-pending';
   section.innerHTML='<h3>Pendientes de asistencia · '+pending.length+'</h3>';
   if(!pending.length)section.insertAdjacentHTML('beforeend','<p>Todos los participantes activos tienen registro para este evento.</p>');
   for(const p of pending){
     const row=document.createElement('div');row.className='event';
-    row.innerHTML='<div><strong>'+escape(p.nombre)+'</strong><p>'+escape(p.usuario)+'</p><div class="quick"><button type="button" data-state="falta">Marcar falta</button><button type="button" class="light" data-state="justificada">Justificar falta</button></div></div>';
+    row.innerHTML='<div><strong>'+escape(p.nombre)+'</strong><p>'+escape(p.usuario)+'</p><div class="quick"><button type="button" data-state="falta">Marcar falta</button><button type="button" class="light" data-state="justificada">Justificar falta</button><button type="button" class="light" data-state="no_aplica">No aplica</button></div></div>';
     row.querySelectorAll('button').forEach(button=>button.onclick=()=>action(async()=>{
       const state=button.dataset.state;
       const warning=state==='falta'&&p.faltasPorMes?.[a.fecha.slice(0,7)]===2?' Esta tercera falta del mes causa baja automática.':'';
@@ -346,6 +412,7 @@ function scannerTools(root,a,reload){
     try{
       const person=code.startsWith('IMJU-JB:1:')&&people.find(p=>p.id===code.slice(10)&&p.activo);
       if(!person)throw Error('El QR no corresponde a un participante activo.');
+      if(!convocado(person,a)||(a.listaCerrada&&!records.some(r=>r.person===person.id&&r.id===a.id)))throw Error('Este joven no figura en la lista de esa actividad.');
       const version=cameraVersion;
       const confirmed=await solicitar(root,'Confirmar asistencia',avatar(person)+'<h4>'+escape(person.nombre)+'</h4><p>Usuario · '+escape(person.usuario)+'</p><p>'+escape(a.titulo)+' · '+escape(fullDate(a.fecha))+' · '+escape(a.horas)+' h</p>','Confirmar asistencia',()=>true);
       if(!confirmed||!root.isConnected||version!==cameraVersion){result.textContent='Lectura cancelada.';return}
@@ -402,7 +469,7 @@ function scannerTools(root,a,reload){
 }
 function roster(root,a,reload){
   const prior=new Map(records.filter(r=>r.id===a.id).map(r=>[r.person,r]));
-  const active=people.filter(p=>p.activo||prior.has(p.id));
+  const active=people.filter(p=>(!a.listaCerrada&&convocado(p,a))||prior.has(p.id));
   root.insertAdjacentHTML('beforeend','<form id="bulk"><div class="quick"><button type="button" class="light" id="allPresent">Marcar pendientes como presentes</button></div><div id="group"></div><button>Guardar lista</button></form>');
   for(const p of active){
     const r=prior.get(p.id), row=document.createElement('div');row.className='list-row';row.dataset.id=p.id;
