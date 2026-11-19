@@ -3,6 +3,30 @@ import {collection,doc,query,where,getDocsFromServer,runTransaction,increment} f
 const caps={actividad:80,aprendizaje:10};
 const key=r=>r?JSON.stringify([r.fecha,r.titulo,r.horas,r.estado,r.categoria,r.nota||'',r.tipo]):null;
 
+export const limiteFaltas=4;
+async function contarFaltas(person){
+  const faltas=await getDocsFromServer(query(collection(person,'registros'),where('estado','==','falta')));
+  return faltas.size;
+}
+function estadoAsistencia(profile,total){
+  const baja=total>=limiteFaltas;
+  const automatic=Boolean(profile.bajaPorFaltas||profile.activo)&&baja;
+  return {faltasAcumuladas:total,bajaPorFaltas:automatic,activo:!baja&&Boolean(profile.activo||profile.bajaPorFaltas)};
+}
+export async function prepararAsistencia(db,profile,admin){
+  if(Number.isInteger(profile.faltasAcumuladas))return profile;
+  const ref=doc(db,'participantes',profile.id);
+  if(!admin)return {...profile,...estadoAsistencia(profile,await contarFaltas(ref))};
+  const data=await runTransaction(db,async tx=>{
+    const current=(await tx.get(ref)).data();
+    if(!current)throw Error('El expediente cambió. Actualiza el panel.');
+    if(Number.isInteger(current.faltasAcumuladas))return current;
+    const estado=estadoAsistencia(current,await contarFaltas(ref));
+    tx.update(ref,estado);return {...current,...estado};
+  });
+  return {...data,id:profile.id};
+}
+
 // El expediente versiona las escrituras que afectan el saldo mensual.
 // Si otra sesión guarda horas al mismo tiempo, Firestore repite la lectura.
 export async function saveRows(db,changes,activity=null,scan=false){
@@ -29,12 +53,15 @@ export async function saveRows(db,changes,activity=null,scan=false){
           if(total>caps[r.categoria])throw Error(profile.data().nombre+' superaría el máximo mensual de '+caps[r.categoria]+' horas de '+r.categoria+'.');
         }
       }
-      return {person,record,next:c.next};
+      const data=profile.data();
+      const total=Number.isInteger(data.faltasAcumuladas)?data.faltasAcumuladas:await contarFaltas(person);
+      const cambio=Number(c.next?.estado==='falta')-Number(old?.estado==='falta');
+      return {person,record,next:c.next,estado:estadoAsistencia(data,total+cambio)};
     }));
     for(const p of plans){
       if(p.existing)continue;
       if(p.next)tx.set(p.record,p.next,{merge:true});else tx.delete(p.record);
-      tx.update(p.person,{revisionHoras:increment(1)});
+      tx.update(p.person,{...p.estado,revisionHoras:increment(1)});
     }
     return plans.map(p=>p.existing||null);
   });
