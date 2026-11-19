@@ -29,7 +29,7 @@ function drawName(ctx,name){
   const words=name.trim().split(/\s+/);
   let size=62, lines=[];
   while(size>=32){
-    ctx.font='bold '+size+'px Georgia,serif';lines=[''];
+    ctx.font='bold '+size+'px sans-serif';lines=[''];
     for(const word of words){
       const i=lines.length-1,joined=[lines[i],word].filter(Boolean).join(' ');
       if(lines[i]&&ctx.measureText(joined).width>580)lines.push(word);else lines[i]=joined;
@@ -38,7 +38,7 @@ function drawName(ctx,name){
     size-=2;
   }
   if(lines.length>3)lines=[lines[0],lines[1],lines.slice(2).join(' ')];
-  lines.forEach((line,i)=>ctx.fillText(line,353,523+i*(size+4),580));
+  lines.forEach((line,i)=>ctx.fillText(line,353,548+i*(size+4),580));
 }
 export async function renderBadge(person,qr){
   const [code,logos,photo]=await Promise.all([
@@ -53,10 +53,19 @@ export async function renderBadge(person,qr){
     const w=logo.width*scale,h=logo.height*scale;
     ctx.drawImage(logo,(i+.5)*width/4-w/2,97-h/2,w,h);
   });
-  ctx.fillStyle='#6a273b';ctx.fillRect(0,196,width,211);
-  ctx.fillStyle='#e1eab6';ctx.fillRect(0,407,width,12);
-  ctx.fillStyle='#ffffff';ctx.font='bold 53px Georgia,serif';ctx.fillText('Jóvenes que Unen al Barrio',55,289,915);
-  ctx.font='31px sans-serif';ctx.fillText('Credencial de participante  ·  Escuinapa',55,352);
+  // Bandas curvas inspiradas en las líneas de una cancha del barrio.
+  ctx.fillStyle='#302347';ctx.fillRect(0,186,width,235);
+  ctx.save();ctx.beginPath();ctx.rect(0,186,width,235);ctx.clip();
+  for(const [radius,color] of [[214,'#e7a28d'],[169,'#bcabd9'],[124,'#dbea99']]){
+    ctx.beginPath();ctx.arc(1038,421,radius,0,Math.PI*2);ctx.lineWidth=27;ctx.strokeStyle=color;ctx.stroke();
+  }
+  ctx.restore();
+  ctx.fillStyle='#dbea99';ctx.font='bold 27px sans-serif';ctx.fillText('IMJU   /   ESCUINAPA',55,245);
+  ctx.fillStyle='#ffffff';ctx.font='bold 62px sans-serif';ctx.fillText('Jóvenes que',55,314);
+  ctx.fillText('Unen al Barrio',55,383);
+  ctx.fillStyle='#f8f6f0';ctx.fillRect(0,421,width,487);
+  ctx.fillStyle='#51415e';ctx.font='bold 23px sans-serif';ctx.fillText('CREDENCIAL DE PARTICIPANTE',353,475);
+  ctx.save();ctx.beginPath();ctx.roundRect(55,475,248,248,38);ctx.clip();
   if(photo){
     const crop=Math.min(photo.width,photo.height);
     ctx.drawImage(photo,(photo.width-crop)/2,(photo.height-crop)/2,crop,crop,55,475,248,248);
@@ -64,16 +73,17 @@ export async function renderBadge(person,qr){
     ctx.fillStyle='#edf1df';ctx.fillRect(55,475,248,248);ctx.fillStyle='#6a273b';ctx.font='bold 72px Georgia,serif';ctx.textAlign='center';
     ctx.fillText(person.nombre.trim().split(/\s+/).slice(0,2).map(n=>n[0]).join(''),179,626);ctx.textAlign='left';
   }
-  ctx.fillStyle='#292320';drawName(ctx,person.nombre);
+  ctx.restore();ctx.fillStyle='#302347';drawName(ctx,person.nombre);
   ctx.font='31px sans-serif';ctx.fillText([person.comunidad,person.generacion].filter(Boolean).join(' · '),353,725,600);
   ctx.fillStyle='#efeae3';ctx.fillRect(55,779,910,2);
   ctx.fillStyle='#54504b';ctx.font='27px sans-serif';ctx.fillText('Usuario del padrón',55,836);
   ctx.font='bold 38px sans-serif';ctx.fillStyle='#292320';ctx.fillText(person.usuario||'Sin registrar',55,887,900);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(code,50,944,363,363);ctx.imageSmoothingEnabled=true;
-  ctx.strokeStyle='#aaaaa3';ctx.lineWidth=2;ctx.setLineDash([10,8]);ctx.strokeRect(482,945,480,354);ctx.setLineDash([]);
+  ctx.strokeStyle='#aaaaa3';ctx.lineWidth=2;ctx.setLineDash([10,8]);ctx.beginPath();ctx.roundRect(482,945,480,354,20);ctx.stroke();ctx.setLineDash([]);
   ctx.textAlign='center';ctx.fillStyle='#56534d';ctx.font='25px sans-serif';
   ctx.fillText('QR de asistencia',232,1342);ctx.fillText('Sello del IMJU',722,1342);
   if(!person.activo){ctx.fillStyle='#6a273b';ctx.font='bold 27px sans-serif';ctx.textAlign='right';ctx.fillText('INACTIVO',958,837)}
+  ctx.fillStyle='#302347';ctx.fillRect(0,1364,width,16);
   return canvas;
 }
 function saveBlob(blob,name){
