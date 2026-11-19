@@ -249,6 +249,51 @@ function attendanceView(view,monthly,reload,scanner){
   root.querySelector('.session-target').append(changeMode);
   if(scanner){scannerTools(root,a,reload);pendingAttendance(root,a,reload)}else roster(root,a,reload);
 }
+// Las decisiones se resuelven al pulsar un botón, cancelar o abandonar la vista.
+function solicitar(root,titulo,contenido,texto,leer){
+  const box=document.createElement('dialog');
+  box.className='decision';box.setAttribute('aria-label',titulo);
+  box.innerHTML='<form><h3>'+escape(titulo)+'</h3>'+contenido+'<p role="status"></p><div class="quick"><button type="button" class="light" autofocus>Cancelar</button><button type="submit">'+escape(texto)+'</button></div></form>';
+  root.append(box);
+  const f=box.querySelector('form');
+  return new Promise(resolve=>{
+    let done=false;
+    function finish(value){
+      if(done)return;
+      done=true;observer.disconnect();document.removeEventListener('visibilitychange',hidden);
+      if(box.open)box.close();box.remove();resolve(value);
+    }
+    function hidden(){if(document.hidden&&texto==='Confirmar asistencia')finish(null)}
+    const observer=new MutationObserver(()=>{if(!box.isConnected)finish(null)});
+    observer.observe(content,{childList:true,subtree:true});
+    document.addEventListener('visibilitychange',hidden);
+    box.oncancel=e=>{e.preventDefault();finish(null)};
+    f.querySelector('button').onclick=()=>finish(null);
+    f.onsubmit=async e=>{
+      e.preventDefault();const submit=f.querySelector('[type=submit]');if(submit.disabled)return;submit.disabled=true;
+      try{finish(await leer(f))}catch(err){f.querySelector('[role=status]').textContent=err.message;submit.disabled=false}
+    };
+    box.showModal();
+  });
+}
+const adjunto='<label class="justificante">Foto de evidencia (opcional)<input name="evidencia" type="file" accept="image/*"></label>';
+async function evidencia(input,previous=''){
+  if(!input.files.length)return previous;
+  const c=await imageCanvas(input.files[0],1100);
+  for(const quality of [.78,.55,.35]){
+    const url=c.toDataURL('image/jpeg',quality);
+    if(url.length<=85000)return url;
+  }
+  const mini=document.createElement('canvas');mini.width=Math.max(1,Math.round(c.width*.65));mini.height=Math.max(1,Math.round(c.height*.65));
+  mini.getContext('2d').drawImage(c,0,0,mini.width,mini.height);
+  const url=mini.toDataURL('image/jpeg',.5);
+  if(url.length>85000)throw Error('Selecciona una foto más pequeña.');
+  return url;
+}
+function ajustarJustificante(row,state){
+  row.querySelector('.justificante').hidden=state!=='justificada';
+  row.querySelector('.nota-label').textContent=state==='justificada'?'Razón de la falta':'Observaciones';
+}
 function pendingAttendance(root,a,reload){
   const saved=new Set(records.filter(r=>r.id===a.id).map(r=>r.person));
   const pending=people.filter(p=>p.activo&&!saved.has(p.id));
@@ -262,8 +307,17 @@ function pendingAttendance(root,a,reload){
     row.querySelectorAll('button').forEach(button=>button.onclick=()=>action(async()=>{
       const state=button.dataset.state;
       const warning=state==='falta'&&p.faltasPorMes?.[a.fecha.slice(0,7)]===2?' Esta tercera falta del mes causa baja automática.':'';
-      if(!confirm('¿Registrar '+labelState(state).toLowerCase()+' para '+p.nombre+' en '+a.titulo+'?'+warning))return;
-      const next=attendanceRow(a,state,0,'');
+      let motivo='',foto='';
+      if(state==='justificada'){
+        const datos=await solicitar(root,'Justificar falta','<p>'+escape(p.nombre)+' · '+escape(a.titulo)+'</p><label>Razón de la falta<textarea name="razon" maxlength="240" required></textarea></label>'+adjunto,'Guardar justificación',async f=>{
+          const razon=f.elements.razon.value.trim();
+          if(!razon)throw Error('Escribe la razón.');
+          return {razon,foto:await evidencia(f.elements.evidencia)};
+        });
+        if(!datos||!root.isConnected)return;
+        motivo=datos.razon;foto=datos.foto;
+      }else if(!confirm('¿Registrar '+labelState(state).toLowerCase()+' para '+p.nombre+' en '+a.titulo+'?'+warning))return;
+      const next=attendanceRow(a,state,0,motivo);if(foto)next.evidencia=foto;
       await saveRows(db,[{person:p.id,id:a.id,prior:null,next}],a);
       if(!root.isConnected)return;
       records=records.filter(r=>r.id!==a.id||r.person!==p.id);
@@ -292,6 +346,9 @@ function scannerTools(root,a,reload){
     try{
       const person=code.startsWith('IMJU-JB:1:')&&people.find(p=>p.id===code.slice(10)&&p.activo);
       if(!person)throw Error('El QR no corresponde a un participante activo.');
+      const version=cameraVersion;
+      const confirmed=await solicitar(root,'Confirmar asistencia',avatar(person)+'<h4>'+escape(person.nombre)+'</h4><p>Usuario · '+escape(person.usuario)+'</p><p>'+escape(a.titulo)+' · '+escape(fullDate(a.fecha))+' · '+escape(a.horas)+' h</p>','Confirmar asistencia',()=>true);
+      if(!confirmed||!root.isConnected||version!==cameraVersion){result.textContent='Lectura cancelada.';return}
       result.textContent='Registrando a '+person.nombre+'…';
       const [prior]=await saveRows(db,[{person:person.id,id:a.id,prior:null,next:attendanceRow(a,'presente',a.horas,'')}],a,true);
       if(!root.isConnected)return;
@@ -315,7 +372,7 @@ function scannerTools(root,a,reload){
       let previousCode='',lastSeen=0;
       async function tick(now){
         if(version!==cameraVersion)return;
-        if(video.readyState>=2&&now-last>=200){
+        if(!root.querySelector('dialog[open]')&&video.readyState>=2&&now-last>=200){
           last=now;
           const scale=Math.min(1,800/Math.max(video.videoWidth,video.videoHeight));
           const w=Math.max(1,Math.round(video.videoWidth*scale)),h=Math.max(1,Math.round(video.videoHeight*scale));
@@ -349,9 +406,10 @@ function roster(root,a,reload){
   root.insertAdjacentHTML('beforeend','<form id="bulk"><div class="quick"><button type="button" class="light" id="allPresent">Marcar pendientes como presentes</button></div><div id="group"></div><button>Guardar lista</button></form>');
   for(const p of active){
     const r=prior.get(p.id), row=document.createElement('div');row.className='list-row';row.dataset.id=p.id;
-    row.innerHTML='<strong>'+escape(p.nombre)+'</strong><label>Asistencia<select name="state"><option value="">Sin registrar</option>'+states+'</select></label><label>Horas<input type="number" name="hours" min="0" max="24" step="1"></label><label>Observación<input name="note" maxlength="240"></label>';
+    row.innerHTML='<strong>'+escape(p.nombre)+'</strong><label>Asistencia<select name="state"><option value="">Sin registrar</option>'+states+'</select></label><label>Horas<input type="number" name="hours" min="0" max="24" step="1"></label><label><span class="nota-label">Observaciones</span><input name="note" maxlength="240"></label>'+adjunto;
     const state=row.querySelector('select'),hours=row.querySelector('[name=hours]');state.value=r?.estado||'';hours.value=r?.horas??a.horas;hours.disabled=state.value!=='presente';row.querySelector('[name=note]').value=r?.nota||'';
-    state.onchange=()=>{hours.disabled=state.value!=='presente';hours.value=hours.disabled?0:(r?.estado==='presente'?r.horas:a.horas)};
+    ajustarJustificante(row,state.value);
+    state.onchange=()=>{ajustarJustificante(row,state.value);hours.disabled=state.value!=='presente';hours.value=hours.disabled?0:(r?.estado==='presente'?r.horas:a.horas)};
     el('group').append(row);
   }
   el('allPresent').onclick=()=>{for(const select of el('group').querySelectorAll('select'))if(!select.value){select.value='presente';select.onchange();dirty=true}};
@@ -361,8 +419,12 @@ function roster(root,a,reload){
       const id=row.dataset.id,r=prior.get(id),s=row.querySelector('select').value;
       if(!s){if(r)throw Error('Para corregir o eliminar un registro usa Horas e historial.');continue}
       const h=Number(row.querySelector('[name=hours]').value),note=row.querySelector('[name=note]').value.trim();
-      if(r&&r.estado===s&&r.horas===h&&(r.nota||'')===note)continue;
-      changes.push({person:id,id:a.id,prior:r,next:attendanceRow(a,s,h,note)});
+      const input=row.querySelector('[name=evidencia]');
+      if(r&&r.estado===s&&r.horas===h&&(r.nota||'')===note&&!(s==='justificada'&&input.files.length))continue;
+      if(s==='justificada'&&!note)throw Error('Escribe la razón de la falta de '+row.querySelector('strong').textContent+'.');
+      const next=attendanceRow(a,s,h,note);
+      next.evidencia=s==='justificada'?await evidencia(input,r?.evidencia):'';
+      changes.push({person:id,id:a.id,prior:r,next});
     }
     if(!changes.length){notice('La lista ya está al día.');return}
     await saveRows(db,changes,a);await reload('Lista guardada · '+changes.length+' registros actualizados.');
@@ -381,11 +443,20 @@ function hours(view,admin,reload){
   for(const r of records){
     const item=document.createElement('article');item.className='history-item';
     item.innerHTML='<div><strong>'+escape(r.titulo)+'</strong><p>'+escape([admin?people.find(p=>p.id===r.person)?.nombre:'',fullDate(r.fecha),r.categoria,r.tipo==='manual'?'Asignación directa':'',labelState(r.estado)].filter(Boolean).join(' · '))+'</p>'+(r.nota?'<small>'+escape(r.nota)+'</small>':'')+'</div><b>'+escape(r.horas)+' h</b>';
+    if(r.estado==='justificada'&&r.evidencia){
+      const panel=document.createElement('details'),summary=document.createElement('summary'),image=document.createElement('img');
+      summary.textContent='Ver foto de evidencia';image.alt='Evidencia de la falta justificada';image.loading='lazy';image.style.maxWidth='100%';image.src=r.evidencia;
+      panel.append(summary,image);item.append(panel);
+    }
     if(admin){
-      const edit=document.createElement('details');edit.innerHTML='<summary>Corregir registro</summary><form>'+select('Estado','state',states)+field('Horas','hours','number','min="0" max="24" step="1"')+'<label>Observaciones<input name="note" maxlength="240"></label><button>Guardar corrección</button><button type="button" class="light">Eliminar registro</button></form>';item.append(edit);
+      const edit=document.createElement('details');edit.innerHTML='<summary>Corregir registro</summary><form>'+select('Estado','state',states)+field('Horas','hours','number','min="0" max="24" step="1"')+'<label><span class="nota-label">Observaciones</span><input name="note" maxlength="240"></label>'+adjunto+'<button>Guardar corrección</button><button type="button" class="light">Eliminar registro</button></form>';item.append(edit);
       const f=edit.querySelector('form');f.elements.state.value=r.estado;f.elements.state.disabled=r.tipo==='manual';f.elements.hours.value=r.horas;f.elements.note.value=r.nota||'';
+      ajustarJustificante(f,r.estado);f.elements.state.onchange=()=>ajustarJustificante(f,f.elements.state.value);
       const buttons=f.querySelectorAll('button');
-      f.onsubmit=e=>{e.preventDefault();action(async()=>{const {id,person,...data}=r;data.estado=f.elements.state.value;data.horas=data.estado==='presente'?Number(f.elements.hours.value):0;data.nota=f.elements.note.value.trim();await saveRows(db,[{person,id,prior:r,next:data}]);await reload('Registro corregido.')},buttons[0])};
+      f.onsubmit=e=>{e.preventDefault();action(async()=>{const {id,person,...data}=r;data.estado=f.elements.state.value;data.horas=data.estado==='presente'?Number(f.elements.hours.value):0;data.nota=f.elements.note.value.trim();
+        if(data.estado==='justificada'&&!data.nota)throw Error('Escribe la razón de la falta.');
+        data.evidencia=data.estado==='justificada'?await evidencia(f.elements.evidencia,r.evidencia):'';
+        await saveRows(db,[{person,id,prior:r,next:data}]);await reload('Registro corregido.')},buttons[0])};
       buttons[1].onclick=()=>{if(confirm('¿Eliminar este registro de '+r.horas+' horas del historial?'))action(async()=>{await saveRows(db,[{person:r.person,id:r.id,prior:r,next:null}]);await reload('Registro eliminado.')},buttons[1])};
     }
     history.append(item);
