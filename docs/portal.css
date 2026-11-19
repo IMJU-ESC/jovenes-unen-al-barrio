@@ -69,3 +69,33 @@ header{padding-block:9px}
 @media(max-width:650px){#login{margin:0 auto}.intro .lead{font-size:14px}#login .intro{min-height:168px}#login .intro h1{font-size:32px}}
 .month input{display:block;margin-top:3px}
 .overview .metric:first-child:nth-last-child(3){grid-column:1/-1}
+
+/* La paleta del barrio se extiende del gafete digital a la navegación. */
+body{--wine:#50325d;--paper:#f8f7f3;--ink:#2e2735;--line:#e1dce2;background:radial-gradient(ellipse at 90% 8%,#ede7f3 0,transparent 36rem),var(--paper)}
+header{background:#fffdf9}
+.task-hero{position:relative;isolation:isolate;background:linear-gradient(115deg,#302347 0%,#4a345e 64%,#6f4763);border-radius:24px}
+.task-hero>div{position:relative;z-index:1}
+.task-hero h3,#login h1,.view-head h2{font-family:"Arial Black",system-ui,sans-serif;font-weight:850;letter-spacing:-.055em}
+.task-hero img{object-position:60% center}
+.task-hero button{background:#dfef99;box-shadow:0 3px 0 #adbb72}
+.task-hero::after{content:"";position:absolute;pointer-events:none;z-index:0;width:190px;height:190px;border:14px double #b99dc547;border-radius:50%;left:43%;bottom:-150px}
+.task-grid button{border-radius:16px;box-shadow:0 3px 0 #3023470d}
+.task-grid button:nth-child(1) .task-icon{color:#59416c;background:#eadff6}
+.task-grid button:nth-child(2) .task-icon{color:#435324;background:#e9f0c9}
+.task-grid button:nth-child(3) .task-icon{color:#794b3c;background:#f8dfd2}
+.overview .metric{border-radius:13px;background:#f2edf5}
+.overview .metric:nth-child(even){background:#f0f3e7}
+.overview .metric strong{color:#3a2b48;font-variant-numeric:tabular-nums}
+.desk .rail button[aria-current],.desk .dock [aria-current=page]{background:#ede7f3;color:#493159}
+.gafete-panel{background:radial-gradient(ellipse at top left,#dfd2ef,transparent 70%),#eeeae6;border:1px solid #dbd4df}
+.gafete-preview canvas{border-radius:10px;box-shadow:0 8px 24px #36274325}
+#login .intro{background:linear-gradient(0deg,#302347f7,#302347a3 57%,#30234722),url(./patio.webp) center/cover}
+#login h1 em{color:#e5efa9}
+@media(prefers-reduced-motion:no-preference){
+ #view,.gafete-preview canvas{animation:panel-in .29s cubic-bezier(.2,.78,.24,1) both}
+ .nav-more[open]>div{animation:panel-in .16s ease-out}
+ .task-grid button,.task-hero button,.directory-person,.rail button{transition:transform .18s ease,box-shadow .18s ease,background-color .18s ease}
+ @media(hover:hover){.task-grid button:hover,.directory-person:hover{transform:translateY(-3px);box-shadow:0 6px 15px #38294314}.task-hero button:hover{transform:translateY(-2px)}}
+ .task-grid button:active,.task-hero button:active{transform:translateY(1px)}
+ @keyframes panel-in{from{opacity:.35;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+}
