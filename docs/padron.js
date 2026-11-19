@@ -73,7 +73,7 @@ export function manageRoster(root,{app,db,people,reload,onError,editOnly=false,c
         const accounts=await getDocsFromServer(query(collection(db,'accesos'),where('participante','==',p.id)));
         await runTransaction(db,async tx=>{
           const profile=await tx.get(profileRef);
-          if(enabled&&profile.data()?.bajaPorFaltas)throw Error('Para reactivar, corrige las faltas en Horas e historial hasta que sean menos de cuatro.');
+          if(enabled&&profile.data()?.bajaPorFaltas)throw Error('Para reactivar, corrige las faltas en Horas e historial hasta que cada mes tenga menos de tres.');
           if(profile.data()?.activo!==p.activo)throw Error('El estado cambió. Actualiza el panel.');
           const linked=await Promise.all(accounts.docs.map(account=>tx.get(account.ref)));
           const targets=linked.filter(a=>a.data()?.participante===p.id&&(enabled?a.data().suspendidoPorPadron:a.data().activo));
@@ -117,7 +117,7 @@ export function manageRoster(root,{app,db,people,reload,onError,editOnly=false,c
       await runTransaction(db,async tx=>{
         const ref=doc(db,'accesos',uid);
         if((await tx.get(ref)).exists())throw Error('La cuenta ya fue dada de alta. Actualiza el padrón.');
-        tx.set(doc(db,'participantes',uid),{...data,usuario:name,activo:true,faltasAcumuladas:0,bajaPorFaltas:false});
+        tx.set(doc(db,'participantes',uid),{...data,usuario:name,activo:true,faltasPorMes:{},bajaPorFaltas:false});
         tx.set(ref,{participante:uid,activo:true,listo:false});
       });
     }finally{await deleteApp(secondary)}
