@@ -1,6 +1,6 @@
 import {icon,navigation} from './navegacion.js';
-import {decode,imageCanvas,renderBadge,saveBadge} from './credencial.js';
-import {saveRows} from './movimientos.js';
+import {decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js';
+import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js';
 import {manageRoster} from './padron.js';
 import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
@@ -41,7 +41,9 @@ async function load(user){
  const [list,agenda]=await Promise.all([admin?getDocs(collection(db,'participantes')).then(snapshot):getDoc(doc(db,'participantes',access.participante)).then(d=>d.exists()?[{...d.data(),id:d.id}]:[]),getDocs(collection(db,'actividades')).then(snapshot)]);
  const rows=(await Promise.all(list.map(async p=>snapshot(await getDocs(query(collection(db,'participantes',p.id,'registros'),where('fecha','>=',selectedMonth+'-01'),where('fecha','<=',selectedMonth+'-31')))).map(r=>({...r,person:p.id}))))).flat();
  if(seq!==revision)return;
- people=list.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));activities=agenda.sort((a,b)=>a.fecha.localeCompare(b.fecha));records=rows.sort((a,b)=>b.fecha.localeCompare(a.fecha));draw(admin)
+ const prepared=await Promise.all(list.map(p=>prepararAsistencia(db,p,admin)));
+ if(seq!==revision)return;
+ people=prepared.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));activities=agenda.sort((a,b)=>a.fecha.localeCompare(b.fecha));records=rows.sort((a,b)=>b.fecha.localeCompare(a.fecha));draw(admin)
 }
 function downloadCsv(rs){const quote=v=>{let s=String(v??'');if(/^[=+@\-\t\r]/.test(s))s="'"+s;return '"'+s.replaceAll('"','""')+'"'};const head=['joven','usuario','comunidad','generacion','telefono','dependencia','actividad','tipo_horas','fecha','asistencia','horas','total_actividades_de_80','total_aprendizaje_de_10','total_programa_de_90','observaciones'];const data=rs.map(r=>{const p=people.find(p=>p.id===r.person);return [p.nombre,p.usuario,p.comunidad,p.generacion,p.telefono,p.dependencia,r.titulo,r.categoria,r.fecha,r.tipo==='manual'?'asignacion_manual':r.estado,r.horas,...['actividad','aprendizaje'].map(c=>sum(rs.filter(x=>x.person===r.person&&x.categoria===c))),sum(rs.filter(x=>x.person===r.person)),r.nota||(r.tipo==='manual'?r.titulo:'')]});const blob=new Blob(['\ufeff'+[head,...data].map(r=>r.map(quote).join(',')).join('\r\n')],{type:'text/csv;charset=utf-8'});const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='IMJU-'+selectedMonth+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(link.href),5000)}
 
@@ -103,6 +105,12 @@ function draw(admin){
       const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download='IMJU-respaldo-'+stamp()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);
     },e.currentTarget);bindProfile(db,view,people,form,notice)}
   }
+  if(!admin&&people[0]?.faltasAcumuladas>=2){
+    const count=people[0].faltasAcumuladas;
+    const warning=document.createElement('aside');warning.className='session-target';warning.setAttribute('role','status');
+    warning.textContent=count>=limiteFaltas?'Baja por '+count+' faltas injustificadas. Si necesitas aclarar un registro, comunícate con coordinación.':'Tienes '+count+' faltas injustificadas acumuladas. '+(count===3?'Una falta injustificada más causa la baja automática.':'La cuarta causa baja automática.')+' Si tienes un justificante, entrégalo a coordinación.';
+    view.prepend(warning);
+  }
   view.querySelectorAll('form').forEach(f=>f.addEventListener('input',()=>{dirty=true}));
 }
 function metric(value,label){return '<article class="metric"><strong>'+escape(value)+'</strong><span>'+label+'</span></article>'}
@@ -122,12 +130,12 @@ function agendaList(list){
   return list.length?list.map(a=>'<article class="event"><time datetime="'+escape(a.fecha)+'"><b>'+escape(a.fecha.slice(8))+'</b>'+escape(new Date(a.fecha+'T12:00:00').toLocaleString('es-MX',{month:'short'}))+'</time><div><strong>'+escape(a.titulo)+'</strong><p>'+escape([a.hora,a.lugar,a.categoria,a.horas+' h'].filter(Boolean).join(' · '))+'</p>'+(a.descripcion?'<p>'+escape(a.descripcion)+'</p>':'')+'</div></article>').join(''):'<p class="empty">Sin actividades programadas en este mes.</p>';
 }
 function badge(view,p,showFields=true){
-  const qr=window.qrcode(0,'M');qr.addData('IMJU-JB:1:'+p.id);qr.make();const url=qr.createDataURL(10,40);
-  view.innerHTML='<section class="gafete-panel"><div class="gafete-preview" aria-live="polite">Preparando la credencial…</div><div class="gafete-actions"><h3>Credencial individual</h3><p>Gafete de 8.5 × 11.5 cm con espacio para el sello. Imprime el PDF en hoja carta al 100 % y recorta por las marcas.</p><button class="pdf" disabled>Descargar PDF para imprimir</button><button class="png light" disabled>Guardar imagen para celular</button><a class="action-link" href="'+url+'" download="QR-IMJU.gif">Descargar solo el QR</a></div></section>'+(showFields?'<section class="card"><h3>Mi expediente</h3>'+personFields(p)+'</section>':'');
+  const url=badgeQR(p);
+  view.innerHTML='<section class="gafete-panel"><div class="gafete-preview" aria-live="polite">Preparando la credencial…</div><div class="gafete-actions"><h3>Credencial individual</h3><p>Gafete de 8.5 × 11.5 cm con vigencia de octubre de 2026 a octubre de 2027. Coloca el sello sobre el borde de la foto, dejando visible el rostro. Imprime el PDF en hoja carta al 100 % y recorta por las marcas.</p><button class="pdf" disabled>Descargar PDF para imprimir</button><button class="png light" disabled>Guardar imagen para celular</button><a class="action-link" href="'+url+'" download="QR-IMJU.gif">Descargar solo el QR</a></div></section>'+(showFields?'<section class="card"><h3>Mi expediente</h3>'+personFields(p)+'</section>':'');
   const preview=view.querySelector('.gafete-preview'),pdf=view.querySelector('.pdf'),png=view.querySelector('.png');
   renderBadge(p,url).then(canvas=>{
     if(!preview.isConnected)return;
-    canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Credencial de '+p.nombre+' · '+p.usuario+' con QR y espacio para sello');
+    canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Credencial de '+p.nombre+' · '+p.usuario+' con QR y vigencia');
     preview.replaceChildren(canvas);
     for(const [button,format] of [[pdf,'pdf'],[png,'png']]){
       button.disabled=false;button.onclick=()=>action(()=>saveBadge(canvas,p,format),button);
@@ -139,7 +147,7 @@ function openManual(person){
   if(person)f.elements.person.value=person;
   f.closest('details').open=true;f.scrollIntoView({block:'center'});f.elements.hours.focus();
 }
-function personFields(p){return '<dl>'+[['Comunidad',p.comunidad],['Generación',p.generacion],['Teléfono',p.telefono],['Dependencia',p.dependencia],['Usuario',p.usuario],['Estado',p.activo?'Activo':'Inactivo']].map(([k,v])=>'<div><dt>'+k+'</dt><dd>'+escape(v||'Pendiente')+'</dd></div>').join('')+'</dl>'}
+function personFields(p){return '<dl>'+[['Comunidad',p.comunidad],['Generación',p.generacion],['Teléfono',p.telefono],['Dependencia',p.dependencia],['Usuario',p.usuario],['Estado',p.bajaPorFaltas?'Baja por faltas':p.activo?'Activo':'Inactivo'],['Faltas injustificadas acumuladas',String(p.faltasAcumuladas??0)]].map(([k,v])=>'<div><dt>'+k+'</dt><dd>'+escape(v||'Pendiente')+'</dd></div>').join('')+'</dl>'}
 function directory(view,reload){
   const person=people.find(p=>p.id===profileId);
   if(person){
@@ -166,6 +174,13 @@ function directory(view,reload){
     return;
   }
   view.innerHTML='<label>Buscar joven<input type="search" id="findPerson" placeholder="Nombre, usuario o comunidad"></label><div id="cards" class="people-grid"></div><div id="rosterTools"></div>';
+  view.insertAdjacentHTML('afterbegin','<section class="card"><h3>Gafetes del padrón</h3><p>Cuatro por hoja carta, de 8.5 × 11.5 cm. Imprime al 100 %. Los inactivos aparecen identificados.</p><button id="printRoster">Descargar todos los gafetes</button><span role="status" id="printProgress"></span></section>');
+  const print=el('printRoster'),progress=el('printProgress');
+  print.disabled=!people.length;
+  print.onclick=()=>action(async()=>{
+    try{await saveRosterBadges(people,(n,total)=>{progress.textContent=' Preparando '+n+' de '+total+'…'})}
+    finally{progress.textContent=''}
+  },print);
   manageRoster(el('rosterTools'),{app,db,people,reload,onError:report,createOnly:true});
   const fold=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   const search=el('findPerson');search.value=directoryQuery;
@@ -226,7 +241,27 @@ function attendanceView(view,monthly,reload,scanner){
   changeMode.textContent=scanner?'Pasar lista para esta actividad':'Escanear QR para esta actividad';
   changeMode.onclick=()=>navigate(scanner?'lista':'qr');
   root.querySelector('.session-target').append(changeMode);
-  if(scanner)scannerTools(root,a,reload);else roster(root,a,reload);
+  if(scanner){scannerTools(root,a,reload);pendingAttendance(root,a,reload)}else roster(root,a,reload);
+}
+function pendingAttendance(root,a,reload){
+  const saved=new Set(records.filter(r=>r.id===a.id).map(r=>r.person));
+  const pending=people.filter(p=>p.activo&&!saved.has(p.id));
+  const section=document.createElement('section');
+  section.innerHTML='<h3>Pendientes de asistencia · '+pending.length+'</h3>';
+  if(!pending.length)section.insertAdjacentHTML('beforeend','<p>Todos los participantes activos tienen registro para este evento.</p>');
+  for(const p of pending){
+    const row=document.createElement('div');row.className='event';
+    row.innerHTML='<div><strong>'+escape(p.nombre)+'</strong><p>'+escape(p.usuario)+'</p><div class="quick"><button type="button" data-state="falta">Marcar falta</button><button type="button" class="light" data-state="justificada">Justificar falta</button></div></div>';
+    row.querySelectorAll('button').forEach(button=>button.onclick=()=>action(async()=>{
+      const state=button.dataset.state;
+      const warning=state==='falta'&&p.faltasAcumuladas===3?' Esta cuarta falta causa baja automática.':'';
+      if(!confirm('¿Registrar '+labelState(state).toLowerCase()+' para '+p.nombre+' en '+a.titulo+'?'+warning))return;
+      await saveRows(db,[{person:p.id,id:a.id,prior:null,next:attendanceRow(a,state,0,'')}],a);
+      lastScan=p.nombre+' · '+labelState(state);await reload(lastScan);
+    },button));
+    section.append(row);
+  }
+  root.append(section);
 }
 function attendanceRow(a,status,hours,note){
   return {titulo:a.titulo,fecha:a.fecha,categoria:a.categoria,estado:status,horas:status==='presente'?Number(hours):0,tipo:'actividad',nota:note};
@@ -270,7 +305,7 @@ function scannerTools(root,a,reload){
   file.onchange=async()=>{
     const image=file.files[0];file.value='';if(!image)return;idle();const version=cameraVersion;
     start.disabled=file.disabled=true;
-    try{const code=decode(await imageCanvas(image,1600));if(version!==cameraVersion)return;if(!code)throw Error('No se encontró un QR. Prueba con una imagen nítida del código completo.');await register(code)}
+    try{const code=decode(await imageCanvas(image,1600),true);if(version!==cameraVersion)return;if(!code)throw Error('No se encontró un QR. Prueba con una imagen nítida del código completo.');await register(code)}
     catch(e){result.textContent=e.message;start.disabled=file.disabled=false}
   };
   document.onvisibilitychange=()=>{if(document.hidden&&video.isConnected&&(stream||!stop.hidden))idle()};

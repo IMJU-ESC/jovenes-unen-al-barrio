@@ -16,9 +16,14 @@ export async function imageCanvas(file, edge) {
     return c;
   } finally {URL.revokeObjectURL(url)}
 }
-export function decode(canvas){
+export function decode(canvas,tryBadge=false){
   const ctx=canvas.getContext('2d',{willReadFrequently:true}), pixels=ctx.getImageData(0,0,canvas.width,canvas.height);
-  return window.jsQR(pixels.data,canvas.width,canvas.height)?.data;
+  const found=window.jsQR(pixels.data,canvas.width,canvas.height)?.data;
+  if(found||!tryBadge||canvas.height<=canvas.width)return found;
+  // En una foto del gafete completo, los escudos pueden confundirse con marcas del QR.
+  const top=Math.floor(canvas.height*.64);
+  const area=ctx.getImageData(0,top,Math.ceil(canvas.width*.47),canvas.height-top);
+  return window.jsQR(area.data,area.width,area.height)?.data;
 }
 
 // Doce píxeles por milímetro, tanto para la vista previa como para el archivo impreso.
@@ -94,10 +99,11 @@ export async function renderBadge(person,qr){
     ctx.fillStyle='white';ctx.font='bold 26px sans-serif';ctx.fillText('INACTIVO',56,875);
   }
   ctx.imageSmoothingEnabled=false;ctx.drawImage(code,50,944,363,363);ctx.imageSmoothingEnabled=true;
-  ctx.strokeStyle='#aaaaa3';ctx.lineWidth=2;ctx.setLineDash([10,8]);ctx.beginPath();ctx.roundRect(482,945,480,354,20);ctx.stroke();ctx.setLineDash([]);
-  ctx.textAlign='center';ctx.fillStyle='#56534d';ctx.font='25px sans-serif';
-  ctx.fillText('QR de asistencia',232,1342);ctx.fillText('Sello del IMJU',722,1342);
-  if(!person.activo){ctx.fillStyle='#6a273b';ctx.font='bold 27px sans-serif';ctx.textAlign='right';ctx.fillText('INACTIVO',958,837)}
+  ctx.fillStyle='#704852';ctx.font='bold 26px sans-serif';ctx.fillText('VIGENCIA DEL GAFETE',468,1050);
+  ctx.fillStyle='#30262a';ctx.font='bold 38px Georgia,serif';ctx.fillText('Octubre 2026',468,1124);
+  ctx.fillText('a octubre 2027',468,1180);
+  ctx.fillStyle='#ac8a56';ctx.fillRect(468,1213,420,3);
+  ctx.fillStyle='#56534d';ctx.font='25px sans-serif';ctx.fillText('QR de asistencia',126,1342);
   ctx.fillStyle='#582336';ctx.fillRect(0,1364,width,16);
   return canvas;
 }
@@ -111,23 +117,52 @@ function encodeCanvas(canvas,type,quality){
 export async function saveBadge(canvas,person,format){
   const filename='Credencial-'+String(person.usuario||person.id).replace(/[^\w.-]/g,'-');
   if(format==='png'){saveBlob(await encodeCanvas(canvas,'image/png'),filename+'.png');return}
-  const jpeg=new Uint8Array(await (await encodeCanvas(canvas,'image/jpeg',.98)).arrayBuffer());
-  // Página carta en puntos PDF. Imagen a escala física y marcas fuera del gafete.
-  const mm=72/25.4,w=85*mm,h=115*mm,x=(612-w)/2,y=(792-h)/2;
-  const lines=['q',w+' 0 0 '+h+' '+x+' '+y+' cm','/Badge Do','Q','0.45 G 0.4 w'];
-  for(const [cx,dx] of [[x,-1],[x+w,1]])for(const [cy,dy] of [[y,-1],[y+h,1]]){
-    lines.push((cx+dx*3)+' '+cy+' m '+(cx+dx*12)+' '+cy+' l S',cx+' '+(cy+dy*3)+' m '+cx+' '+(cy+dy*12)+' l S');
+  await badgePdf([await encodeCanvas(canvas,'image/jpeg',.98)],filename,false);
+}
+
+export function badgeQR(person){
+  const qr=window.qrcode(0,'M');qr.addData('IMJU-JB:1:'+person.id);qr.make();return qr.createDataURL(10,40);
+}
+
+export async function saveRosterBadges(people,progress){
+  const images=[];
+  for(const person of people){
+    progress(images.length+1,people.length);
+    const canvas=await renderBadge(person,badgeQR(person));
+    images.push(await encodeCanvas(canvas,'image/jpeg',.96));
+    canvas.width=canvas.height=1;
   }
-  const content=lines.join('\n')+'\n',chunks=[],offsets=[0];let length=0;
+  await badgePdf(images,'Gafetes-IMJU-2026-2027',true);
+}
+
+async function badgePdf(images,filename,grouped){
+  const mm=72/25.4,w=85*mm,h=115*mm,perPage=grouped?4:1;
+  const chunks=[],offsets=[0],pages=[];let length=0,id=3;
   function append(value){const chunk=typeof value==='string'?new TextEncoder().encode(value):value;chunks.push(chunk);length+=chunk.length}
-  function object(id,...parts){offsets[id]=length;append(id+' 0 obj\n');parts.forEach(append);append('\nendobj\n')}
+  function object(n,...parts){offsets[n]=length;append(n+' 0 obj\n');parts.forEach(append);append('\nendobj\n')}
   append('%PDF-1.4\n');
-  object(1,'<< /Type /Catalog /Pages 2 0 R >>');object(2,'<< /Type /Pages /Count 1 /Kids [3 0 R] >>');
-  object(3,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << /Badge 4 0 R >> >> /Contents 5 0 R >>');
-  object(4,'<< /Type /XObject /Subtype /Image /Width '+width+' /Height '+height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpeg.length+' >>\nstream\n',jpeg,'\nendstream');
-  object(5,'<< /Length '+content.length+' >>\nstream\n',content,'endstream');
-  const xref=length;append('xref\n0 6\n0000000000 65535 f \n');
+  for(let first=0;first<images.length;first+=perPage){
+    const resources=[],lines=[];
+    for(let slot=0;slot<perPage&&first+slot<images.length;slot++){
+      const jpeg=new Uint8Array(await images[first+slot].arrayBuffer());
+      const image=id++,label='/Im'+slot;
+      object(image,'<< /Type /XObject /Subtype /Image /Width '+width+' /Height '+height+' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length '+jpeg.length+' >>\nstream\n',jpeg,'\nendstream');
+      resources.push(label+' '+image+' 0 R');
+      const x=grouped?(612-2*w-24)/2+(slot%2)*(w+24):(612-w)/2;
+      const y=grouped?(792-2*h-24)/2+(slot<2?h+24:0):(792-h)/2;
+      lines.push('q',w+' 0 0 '+h+' '+x+' '+y+' cm',label+' Do','Q','0.45 G 0.4 w');
+      for(const [cx,dx] of [[x,-1],[x+w,1]])for(const [cy,dy] of [[y,-1],[y+h,1]]){
+        lines.push((cx+dx*3)+' '+cy+' m '+(cx+dx*10)+' '+cy+' l S',cx+' '+(cy+dy*3)+' m '+cx+' '+(cy+dy*10)+' l S');
+      }
+    }
+    const stream=lines.join('\n')+'\n',content=id++,page=id++;
+    object(content,'<< /Length '+stream.length+' >>\nstream\n',stream,'endstream');
+    object(page,'<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /XObject << '+resources.join(' ')+' >> >> /Contents '+content+' 0 R >>');
+    pages.push(page+' 0 R');
+  }
+  object(1,'<< /Type /Catalog /Pages 2 0 R >>');object(2,'<< /Type /Pages /Count '+pages.length+' /Kids ['+pages.join(' ')+'] >>');
+  const xref=length;append('xref\n0 '+id+'\n0000000000 65535 f \n');
   offsets.slice(1).forEach(offset=>append(String(offset).padStart(10,'0')+' 00000 n \n'));
-  append('trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
+  append('trailer\n<< /Size '+id+' /Root 1 0 R >>\nstartxref\n'+xref+'\n%%EOF\n');
   saveBlob(new Blob(chunks,{type:'application/pdf'}),filename+'.pdf');
 }
