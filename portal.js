@@ -39,9 +39,10 @@ async function load(user){
  if(!access.listo){content.innerHTML='<form id="rotate"><h2>Elige tu contraseña personal</h2>'+field('Nueva contraseña (mínimo 10 caracteres)','a','password','minlength="10" autocomplete="new-password"')+field('Repite la contraseña','b','password','autocomplete="new-password"')+'<button>Guardar y entrar</button></form>';form('rotate',async d=>{if(d.a!==d.b)throw Error('Las contraseñas deben coincidir.');await updatePassword(user,d.a);await updateDoc(s.ref,{listo:true});await load(user)});return}
  const admin=access.participante==='ADMIN';
  const [list,agenda]=await Promise.all([admin?getDocs(collection(db,'participantes')).then(snapshot):getDoc(doc(db,'participantes',access.participante)).then(d=>d.exists()?[{...d.data(),id:d.id}]:[]),getDocs(collection(db,'actividades')).then(snapshot)]);
- const rows=(await Promise.all(list.map(async p=>snapshot(await getDocs(query(collection(db,'participantes',p.id,'registros'),where('fecha','>=',selectedMonth+'-01'),where('fecha','<=',selectedMonth+'-31')))).map(r=>({...r,person:p.id}))))).flat();
+ const visibles=admin?list.filter(p=>!p.muestra):list;
+ const rows=(await Promise.all(visibles.map(async p=>snapshot(await getDocs(query(collection(db,'participantes',p.id,'registros'),where('fecha','>=',selectedMonth+'-01'),where('fecha','<=',selectedMonth+'-31')))).map(r=>({...r,person:p.id}))))).flat();
  if(seq!==revision)return;
- const prepared=await Promise.all(list.map(p=>prepararAsistencia(db,p,admin)));
+ const prepared=await Promise.all(visibles.map(p=>prepararAsistencia(db,p,admin)));
  if(seq!==revision)return;
  people=prepared.sort((a,b)=>a.nombre.localeCompare(b.nombre,'es'));activities=agenda.sort((a,b)=>a.fecha.localeCompare(b.fecha));records=rows.sort((a,b)=>b.fecha.localeCompare(a.fecha));draw(admin)
 }
@@ -152,7 +153,7 @@ function openManual(person){
   if(person)f.elements.person.value=person;
   f.closest('details').open=true;f.scrollIntoView({block:'center'});f.elements.hours.focus();
 }
-function personFields(p){return '<dl>'+[['Comunidad',p.comunidad],['Generación',p.generacion],['Teléfono',p.telefono],['Dependencia',p.dependencia],['Usuario',p.usuario],['Estado',p.bajaPorFaltas?'Baja por faltas':p.activo?'Activo':'Inactivo'],['Faltas injustificadas · '+selectedMonth,String(p.faltasPorMes?.[selectedMonth]||0)]].map(([k,v])=>'<div><dt>'+k+'</dt><dd>'+escape(v||'Pendiente')+'</dd></div>').join('')+'</dl>'}
+function personFields(p){return '<dl>'+[['Comunidad',p.comunidad],['Generación',p.generacion],['Teléfono',p.telefono],['Dependencia',p.dependencia],...([['Tipo de teléfono',p.tipoTelefono],['Clave de origen',p.claveLocal],['Categoría del padrón',p.categoriaPadron],['Domicilio',p.domicilio],['Colonia',p.colonia]].filter(([,v])=>v)),['Usuario',p.usuario],['Estado',p.bajaPorFaltas?'Baja por faltas':p.activo?'Activo':'Inactivo'],['Faltas injustificadas · '+selectedMonth,String(p.faltasPorMes?.[selectedMonth]||0)]].map(([k,v])=>'<div><dt>'+k+'</dt><dd>'+escape(v||'Pendiente')+'</dd></div>').join('')+'</dl>'}
 function directory(view,reload){
   const person=people.find(p=>p.id===profileId);
   if(person){
