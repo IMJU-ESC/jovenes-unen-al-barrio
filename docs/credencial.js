@@ -27,18 +27,39 @@ const logoFiles=['sspc','escudo','municipio','imju'];
 
 function drawName(ctx,name){
   const words=name.trim().split(/\s+/);
-  let size=62, lines=[];
-  while(size>=32){
-    ctx.font='bold '+size+'px sans-serif';lines=[''];
+  let lines, size;
+  for(size=64;size>=32;size-=2){
+    ctx.font='bold '+size+'px sans-serif';
+    lines=[''];
     for(const word of words){
-      const i=lines.length-1,joined=[lines[i],word].filter(Boolean).join(' ');
-      if(lines[i]&&ctx.measureText(joined).width>580)lines.push(word);else lines[i]=joined;
+      const i=lines.length-1, joined=[lines[i],word].filter(Boolean).join(' ');
+      if(lines[i]&&ctx.measureText(joined).width>446)lines.push(word);
+      else lines[i]=joined;
     }
-    if(lines.length<=3)break;
-    size-=2;
+    if(lines.length*(size+4)<=270||size===32)break;
   }
-  if(lines.length>3)lines=[lines[0],lines[1],lines.slice(2).join(' ')];
-  lines.forEach((line,i)=>ctx.fillText(line,353,548+i*(size+4),580));
+  const step=Math.min(size+4,258/Math.max(1,lines.length-1));
+  lines.forEach((line,i)=>ctx.fillText(line,532,408+i*step,446));
+}
+
+function drawPortrait(ctx,photo,name){
+  const x=38,y=292,w=454,h=600;
+  ctx.fillStyle='#e9e6df';ctx.fillRect(x,y,w,h);
+  if(photo){
+    // Respeta fotos de grupo u horizontales; en retratos conserva la parte superior.
+    const wide=photo.width>photo.height*1.15;
+    const scale=wide?Math.min(w/photo.width,h/photo.height):Math.max(w/photo.width,h/photo.height);
+    const dw=photo.width*scale,dh=photo.height*scale;
+    ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();
+    ctx.drawImage(photo,x+(w-dw)/2,y+(h-dh)*(wide ? 0.5 : 0.18),dw,dh);
+    ctx.restore();
+  }else{
+    ctx.save();ctx.textAlign='center';ctx.fillStyle='#62414a';ctx.font='bold 105px Georgia,serif';
+    ctx.fillText(name.trim().split(/\s+/).slice(0,2).map(word=>word[0]).join(''),x+w/2,y+h/2,w-40);
+    ctx.font='27px sans-serif';ctx.fillText('Fotografía pendiente',x+w/2,y+h/2+55);
+    ctx.restore();
+  }
+  ctx.strokeStyle='#c8c1b6';ctx.lineWidth=2;ctx.strokeRect(x,y,w,h);
 }
 export async function renderBadge(person,qr){
   const [code,logos,photo]=await Promise.all([
@@ -47,43 +68,37 @@ export async function renderBadge(person,qr){
   ]);
   const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
   const ctx=canvas.getContext('2d');
-  ctx.fillStyle='#ffffff';ctx.fillRect(0,0,width,height);
+  ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);
   logos.forEach((logo,i)=>{
-    const scale=Math.min(163/logo.width,143/logo.height);
+    const scale=Math.min(170/logo.width,112/logo.height);
     const w=logo.width*scale,h=logo.height*scale;
-    ctx.drawImage(logo,(i+.5)*width/4-w/2,97-h/2,w,h);
+    ctx.drawImage(logo,(i+.5)*width/4-w/2,75-h/2,w,h);
   });
-  // Bandas curvas inspiradas en las líneas de una cancha del barrio.
-  ctx.fillStyle='#302347';ctx.fillRect(0,186,width,235);
-  ctx.save();ctx.beginPath();ctx.rect(0,186,width,235);ctx.clip();
-  for(const [radius,color] of [[214,'#e7a28d'],[169,'#bcabd9'],[124,'#dbea99']]){
-    ctx.beginPath();ctx.arc(1038,421,radius,0,Math.PI*2);ctx.lineWidth=27;ctx.strokeStyle=color;ctx.stroke();
+  ctx.fillStyle='#582336';ctx.fillRect(0,150,width,110);
+  ctx.fillStyle='#fff';ctx.font='bold 55px Georgia,serif';
+  ctx.fillText('Jóvenes que Unen al Barrio',38,222,944);
+  ctx.fillStyle='#ac8a56';ctx.fillRect(0,260,width,6);
+  ctx.fillStyle='#faf8f3';ctx.fillRect(0,266,width,654);
+  drawPortrait(ctx,photo,person.nombre);
+  ctx.fillStyle='#704852';ctx.font='bold 23px sans-serif';ctx.fillText('CREDENCIAL DE PARTICIPANTE',532,325,446);
+  ctx.fillStyle='#272429';drawName(ctx,person.nombre);
+  ctx.fillStyle='#c2b194';ctx.fillRect(532,695,446,2);
+  const fields=[['Usuario del padrón',person.usuario||'Sin registrar'],['Comunidad',person.comunidad],['Generación',person.generacion]].filter(([,value])=>value);
+  fields.forEach(([label,value],i)=>{
+    const y=730+i*65;
+    ctx.fillStyle='#5c5551';ctx.font='23px sans-serif';ctx.fillText(label,532,y);
+    ctx.fillStyle='#30262a';ctx.font='bold 29px sans-serif';ctx.fillText(value,532,y+33,446);
+  });
+  if(!person.activo){
+    ctx.fillStyle='#582336';ctx.fillRect(38,841,454,51);
+    ctx.fillStyle='white';ctx.font='bold 26px sans-serif';ctx.fillText('INACTIVO',56,875);
   }
-  ctx.restore();
-  ctx.fillStyle='#dbea99';ctx.font='bold 27px sans-serif';ctx.fillText('IMJU   /   ESCUINAPA',55,245);
-  ctx.fillStyle='#ffffff';ctx.font='bold 62px sans-serif';ctx.fillText('Jóvenes que',55,314);
-  ctx.fillText('Unen al Barrio',55,383);
-  ctx.fillStyle='#f8f6f0';ctx.fillRect(0,421,width,487);
-  ctx.fillStyle='#51415e';ctx.font='bold 23px sans-serif';ctx.fillText('CREDENCIAL DE PARTICIPANTE',353,475);
-  ctx.save();ctx.beginPath();ctx.roundRect(55,475,248,248,38);ctx.clip();
-  if(photo){
-    const crop=Math.min(photo.width,photo.height);
-    ctx.drawImage(photo,(photo.width-crop)/2,(photo.height-crop)/2,crop,crop,55,475,248,248);
-  }else{
-    ctx.fillStyle='#edf1df';ctx.fillRect(55,475,248,248);ctx.fillStyle='#6a273b';ctx.font='bold 72px Georgia,serif';ctx.textAlign='center';
-    ctx.fillText(person.nombre.trim().split(/\s+/).slice(0,2).map(n=>n[0]).join(''),179,626);ctx.textAlign='left';
-  }
-  ctx.restore();ctx.fillStyle='#302347';drawName(ctx,person.nombre);
-  ctx.font='31px sans-serif';ctx.fillText([person.comunidad,person.generacion].filter(Boolean).join(' · '),353,725,600);
-  ctx.fillStyle='#efeae3';ctx.fillRect(55,779,910,2);
-  ctx.fillStyle='#54504b';ctx.font='27px sans-serif';ctx.fillText('Usuario del padrón',55,836);
-  ctx.font='bold 38px sans-serif';ctx.fillStyle='#292320';ctx.fillText(person.usuario||'Sin registrar',55,887,900);
   ctx.imageSmoothingEnabled=false;ctx.drawImage(code,50,944,363,363);ctx.imageSmoothingEnabled=true;
   ctx.strokeStyle='#aaaaa3';ctx.lineWidth=2;ctx.setLineDash([10,8]);ctx.beginPath();ctx.roundRect(482,945,480,354,20);ctx.stroke();ctx.setLineDash([]);
   ctx.textAlign='center';ctx.fillStyle='#56534d';ctx.font='25px sans-serif';
   ctx.fillText('QR de asistencia',232,1342);ctx.fillText('Sello del IMJU',722,1342);
   if(!person.activo){ctx.fillStyle='#6a273b';ctx.font='bold 27px sans-serif';ctx.textAlign='right';ctx.fillText('INACTIVO',958,837)}
-  ctx.fillStyle='#302347';ctx.fillRect(0,1364,width,16);
+  ctx.fillStyle='#582336';ctx.fillRect(0,1364,width,16);
   return canvas;
 }
 function saveBlob(blob,name){
