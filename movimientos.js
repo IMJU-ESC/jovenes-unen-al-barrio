@@ -3,24 +3,32 @@ import {collection,doc,query,where,getDocsFromServer,runTransaction,increment} f
 const caps={actividad:80,aprendizaje:10};
 const key=r=>r?JSON.stringify([r.fecha,r.titulo,r.horas,r.estado,r.categoria,r.nota||'',r.tipo]):null;
 
-export const limiteFaltas=4;
+export const limiteFaltas=3;
 async function contarFaltas(person){
   const faltas=await getDocsFromServer(query(collection(person,'registros'),where('estado','==','falta')));
-  return faltas.size;
+  const meses={};
+  for(const row of faltas.docs)ajustarMes(meses,row.data(),1);
+  return meses;
 }
-function estadoAsistencia(profile,total){
-  const baja=total>=limiteFaltas;
+function ajustarMes(meses,registro,delta){
+  if(registro?.estado!=='falta')return;
+  const mes=registro.fecha.slice(0,7);
+  meses[mes]=(meses[mes]||0)+delta;
+  if(!meses[mes])delete meses[mes];
+}
+function estadoAsistencia(profile,meses){
+  const baja=Object.values(meses).some(n=>n>=limiteFaltas);
   const automatic=Boolean(profile.bajaPorFaltas||profile.activo)&&baja;
-  return {faltasAcumuladas:total,bajaPorFaltas:automatic,activo:!baja&&Boolean(profile.activo||profile.bajaPorFaltas)};
+  return {faltasPorMes:meses,bajaPorFaltas:automatic,activo:!baja&&Boolean(profile.activo||profile.bajaPorFaltas)};
 }
 export async function prepararAsistencia(db,profile,admin){
-  if(Number.isInteger(profile.faltasAcumuladas))return profile;
+  if(profile.faltasPorMes)return profile;
   const ref=doc(db,'participantes',profile.id);
   if(!admin)return {...profile,...estadoAsistencia(profile,await contarFaltas(ref))};
   const data=await runTransaction(db,async tx=>{
     const current=(await tx.get(ref)).data();
     if(!current)throw Error('El expediente cambió. Actualiza el panel.');
-    if(Number.isInteger(current.faltasAcumuladas))return current;
+    if(current.faltasPorMes)return current;
     const estado=estadoAsistencia(current,await contarFaltas(ref));
     tx.update(ref,estado);return {...current,...estado};
   });
@@ -54,9 +62,9 @@ export async function saveRows(db,changes,activity=null,scan=false){
         }
       }
       const data=profile.data();
-      const total=Number.isInteger(data.faltasAcumuladas)?data.faltasAcumuladas:await contarFaltas(person);
-      const cambio=Number(c.next?.estado==='falta')-Number(old?.estado==='falta');
-      return {person,record,next:c.next,estado:estadoAsistencia(data,total+cambio)};
+      const meses={...(data.faltasPorMes||await contarFaltas(person))};
+      ajustarMes(meses,old,-1);ajustarMes(meses,c.next,1);
+      return {person,record,next:c.next,estado:estadoAsistencia(data,meses)};
     }));
     for(const p of plans){
       if(p.existing)continue;

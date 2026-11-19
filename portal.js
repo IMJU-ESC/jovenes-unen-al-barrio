@@ -105,11 +105,16 @@ function draw(admin){
       const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download='IMJU-respaldo-'+stamp()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);
     },e.currentTarget);bindProfile(db,view,people,form,notice)}
   }
-  if(!admin&&people[0]?.faltasAcumuladas>=2){
-    const count=people[0].faltasAcumuladas;
-    const warning=document.createElement('aside');warning.className='session-target';warning.setAttribute('role','status');
-    warning.textContent=count>=limiteFaltas?'Baja por '+count+' faltas injustificadas. Si necesitas aclarar un registro, comunícate con coordinación.':'Tienes '+count+' faltas injustificadas acumuladas. '+(count===3?'Una falta injustificada más causa la baja automática.':'La cuarta causa baja automática.')+' Si tienes un justificante, entrégalo a coordinación.';
-    view.prepend(warning);
+  if(!admin&&people[0]){
+    const p=people[0],actual=stamp().slice(0,7);
+    const mes=Object.keys(p.faltasPorMes).sort().find(m=>p.faltasPorMes[m]>=limiteFaltas)||actual;
+    const count=p.faltasPorMes[mes]||0;
+    if(count){
+      const warning=document.createElement('aside');warning.className='session-target';warning.setAttribute('role','status');
+      const periodo=new Date(mes+'-15T12:00:00').toLocaleString('es-MX',{month:'long',year:'numeric'});
+      warning.textContent=(count>=3?'Baja por '+count+' faltas injustificadas en '+periodo+'.':count===2?'Tienes 2 faltas injustificadas en '+periodo+'. Una más este mes causa baja automática.':'Tienes una falta injustificada en '+periodo+'. La tercera del mismo mes causa baja automática.')+' Para aclaraciones, comunícate con coordinación.';
+      view.prepend(warning);
+    }
   }
   view.querySelectorAll('form').forEach(f=>f.addEventListener('input',()=>{dirty=true}));
 }
@@ -147,7 +152,7 @@ function openManual(person){
   if(person)f.elements.person.value=person;
   f.closest('details').open=true;f.scrollIntoView({block:'center'});f.elements.hours.focus();
 }
-function personFields(p){return '<dl>'+[['Comunidad',p.comunidad],['Generación',p.generacion],['Teléfono',p.telefono],['Dependencia',p.dependencia],['Usuario',p.usuario],['Estado',p.bajaPorFaltas?'Baja por faltas':p.activo?'Activo':'Inactivo'],['Faltas injustificadas acumuladas',String(p.faltasAcumuladas??0)]].map(([k,v])=>'<div><dt>'+k+'</dt><dd>'+escape(v||'Pendiente')+'</dd></div>').join('')+'</dl>'}
+function personFields(p){return '<dl>'+[['Comunidad',p.comunidad],['Generación',p.generacion],['Teléfono',p.telefono],['Dependencia',p.dependencia],['Usuario',p.usuario],['Estado',p.bajaPorFaltas?'Baja por faltas':p.activo?'Activo':'Inactivo'],['Faltas injustificadas · '+selectedMonth,String(p.faltasPorMes?.[selectedMonth]||0)]].map(([k,v])=>'<div><dt>'+k+'</dt><dd>'+escape(v||'Pendiente')+'</dd></div>').join('')+'</dl>'}
 function directory(view,reload){
   const person=people.find(p=>p.id===profileId);
   if(person){
@@ -247,6 +252,7 @@ function pendingAttendance(root,a,reload){
   const saved=new Set(records.filter(r=>r.id===a.id).map(r=>r.person));
   const pending=people.filter(p=>p.activo&&!saved.has(p.id));
   const section=document.createElement('section');
+  section.className='scan-pending';
   section.innerHTML='<h3>Pendientes de asistencia · '+pending.length+'</h3>';
   if(!pending.length)section.insertAdjacentHTML('beforeend','<p>Todos los participantes activos tienen registro para este evento.</p>');
   for(const p of pending){
@@ -254,14 +260,23 @@ function pendingAttendance(root,a,reload){
     row.innerHTML='<div><strong>'+escape(p.nombre)+'</strong><p>'+escape(p.usuario)+'</p><div class="quick"><button type="button" data-state="falta">Marcar falta</button><button type="button" class="light" data-state="justificada">Justificar falta</button></div></div>';
     row.querySelectorAll('button').forEach(button=>button.onclick=()=>action(async()=>{
       const state=button.dataset.state;
-      const warning=state==='falta'&&p.faltasAcumuladas===3?' Esta cuarta falta causa baja automática.':'';
+      const warning=state==='falta'&&p.faltasPorMes?.[a.fecha.slice(0,7)]===2?' Esta tercera falta del mes causa baja automática.':'';
       if(!confirm('¿Registrar '+labelState(state).toLowerCase()+' para '+p.nombre+' en '+a.titulo+'?'+warning))return;
-      await saveRows(db,[{person:p.id,id:a.id,prior:null,next:attendanceRow(a,state,0,'')}],a);
-      lastScan=p.nombre+' · '+labelState(state);await reload(lastScan);
+      const next=attendanceRow(a,state,0,'');
+      await saveRows(db,[{person:p.id,id:a.id,prior:null,next}],a);
+      if(!root.isConnected)return;
+      records=records.filter(r=>r.id!==a.id||r.person!==p.id);
+      records.unshift({...next,id:a.id,person:p.id});
+      lastScan=p.nombre+' · '+labelState(state);
+      el('scanResult').textContent=lastScan;
+      pendingAttendance(root,a,reload);
+      const fresh=await getDoc(doc(db,'participantes',p.id));
+      if(root.isConnected&&fresh.exists())Object.assign(p,fresh.data());
     },button));
     section.append(row);
   }
-  root.append(section);
+  const previous=root.querySelector('.scan-pending');
+  if(previous)previous.replaceWith(section);else root.append(section);
 }
 function attendanceRow(a,status,hours,note){
   return {titulo:a.titulo,fecha:a.fecha,categoria:a.categoria,estado:status,horas:status==='presente'?Number(hours):0,tipo:'actividad',nota:note};
@@ -273,15 +288,18 @@ function scannerTools(root,a,reload){
   if(lastScan)start.textContent='Escanear siguiente joven';
   function idle(){stopCamera();video.srcObject=null;video.hidden=true;stop.hidden=true;start.disabled=false;file.disabled=false}
   async function register(code){
-    idle();start.disabled=file.disabled=true;
     try{
       const person=code.startsWith('IMJU-JB:1:')&&people.find(p=>p.id===code.slice(10)&&p.activo);
       if(!person)throw Error('El QR no corresponde a un participante activo.');
       result.textContent='Registrando a '+person.nombre+'…';
       const [prior]=await saveRows(db,[{person:person.id,id:a.id,prior:null,next:attendanceRow(a,'presente',a.horas,'')}],a,true);
+      if(!root.isConnected)return;
+      records=records.filter(r=>r.id!==a.id||r.person!==person.id);
+      records.unshift({...(prior||attendanceRow(a,'presente',a.horas,'')),id:a.id,person:person.id});
       lastScan=person.nombre+' · '+(prior?'Registro existente: '+labelState(prior.estado)+' · '+prior.horas+' h.':'Asistencia guardada · '+a.horas+' h.')+' '+a.titulo;
-      await reload(lastScan);
-    }catch(e){result.textContent=e.message;start.disabled=file.disabled=false}
+      result.textContent=lastScan;
+      pendingAttendance(root,a,reload);
+    }catch(e){result.textContent=e.message}
   }
   start.onclick=async()=>{
     idle();const version=cameraVersion;
@@ -291,12 +309,25 @@ function scannerTools(root,a,reload){
       const media=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
       if(version!==cameraVersion||!video.isConnected){media.getTracks().forEach(t=>t.stop());return}
       stream=media;video.srcObject=media;video.hidden=false;await video.play();
-      result.textContent='Centra el código completo frente a la cámara.';
+      result.textContent='Centra el QR. Al confirmar el nombre, acerca el siguiente gafete.';
       const c=document.createElement('canvas'),ctx=c.getContext('2d',{willReadFrequently:true});let last=0;
-      function tick(now){
+      let previousCode='',lastSeen=0;
+      async function tick(now){
         if(version!==cameraVersion)return;
-        if(video.videoWidth&&now-last>=180){last=now;c.width=720;c.height=Math.max(1,Math.round(video.videoHeight*720/video.videoWidth));ctx.drawImage(video,0,0,c.width,c.height);const code=decode(c);if(code){void register(code);return}}
-        frame=requestAnimationFrame(tick);
+        if(video.readyState>=2&&now-last>=200){
+          last=now;
+          const scale=Math.min(1,800/Math.max(video.videoWidth,video.videoHeight));
+          const w=Math.max(1,Math.round(video.videoWidth*scale)),h=Math.max(1,Math.round(video.videoHeight*scale));
+          if(c.width!==w||c.height!==h){c.width=w;c.height=h}
+          ctx.drawImage(video,0,0,w,h);
+          const code=decode(c);
+          if(code){
+            const fresh=code!==previousCode||now-lastSeen>1500;
+            previousCode=code;lastSeen=now;
+            if(fresh){await register(code);lastSeen=performance.now()}
+          }
+        }
+        if(version===cameraVersion)frame=requestAnimationFrame(tick);
       }
       frame=requestAnimationFrame(tick);
     }catch(e){if(version===cameraVersion){idle();result.textContent='No se pudo usar la cámara. Revisa el permiso del navegador o pulsa Leer imagen del QR.'}}
@@ -306,7 +337,8 @@ function scannerTools(root,a,reload){
     const image=file.files[0];file.value='';if(!image)return;idle();const version=cameraVersion;
     start.disabled=file.disabled=true;
     try{const code=decode(await imageCanvas(image,1600),true);if(version!==cameraVersion)return;if(!code)throw Error('No se encontró un QR. Prueba con una imagen nítida del código completo.');await register(code)}
-    catch(e){result.textContent=e.message;start.disabled=file.disabled=false}
+    catch(e){result.textContent=e.message}
+    finally{if(version===cameraVersion)start.disabled=file.disabled=false}
   };
   document.onvisibilitychange=()=>{if(document.hidden&&video.isConnected&&(stream||!stop.hidden))idle()};
 }
