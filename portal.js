@@ -143,13 +143,22 @@ function personFields(p){return '<dl>'+[['Comunidad',p.comunidad],['Generación'
 function directory(view,reload){
   const person=people.find(p=>p.id===profileId);
   if(person){
-    view.innerHTML='<button class="light" id="backDirectory">← Volver al directorio</button><section class="profile-head">'+avatar(person)+'<div><h3>'+escape(person.nombre)+'</h3><p>Usuario del padrón · <strong>'+escape(person.usuario)+'</strong></p></div></section><div class="quick profile-controls"><button id="profileEdit">Editar expediente</button><button id="profileHours" '+(person.activo?'':'disabled')+'>Sumar horas</button><button class="light" data-task="qr">Escanear QR</button><button class="light" data-task="lista">Pasar lista</button></div><section class="card"><h3>Datos del joven</h3>'+personFields(person)+'<p><strong>'+sum(records.filter(r=>r.person===person.id))+' h</strong> acreditadas en el mes seleccionado</p></section><div id="profileBadge"></div><section id="profileEditor" hidden></section>';
+    view.innerHTML='<button class="light" id="backDirectory">← Volver al directorio</button><section class="profile-head">'+avatar(person)+'<div><h3>'+escape(person.nombre)+'</h3><p>Usuario del padrón · <strong>'+escape(person.usuario)+'</strong></p></div></section><div class="quick profile-controls"><button id="profileEdit">Editar expediente</button><button class="light" id="profileAccess" '+(person.activo?'':'disabled')+'>Recuperar acceso</button><button id="profileHours" '+(person.activo?'':'disabled')+'>Sumar horas</button><button class="light" data-task="qr">Escanear QR</button><button class="light" data-task="lista">Pasar lista</button></div><section class="card"><h3>Datos del joven</h3>'+personFields(person)+'<p><strong>'+sum(records.filter(r=>r.person===person.id))+' h</strong> acreditadas en el mes seleccionado</p></section><div id="profileBadge"></div><section id="profileEditor" hidden></section>';
     badge(el('profileBadge'),person,false);
     const editor=el('profileEditor');
     el('profileEdit').onclick=()=>{
       if(!editor.childElementCount)manageRoster(editor,{app,db,people:[person],reload,onError:report,editOnly:true});
       editor.hidden=false;editor.querySelector('details').open=true;editor.scrollIntoView({block:'center'});editor.querySelector('input[name=nombre]').focus();
       editor.oninput=()=>{dirty=true};
+    };
+    el('profileAccess').onclick=()=>{
+      navigate('cuenta');
+      if(page!=='cuenta')return;
+      const picker=el('bindPerson');
+      picker.value=person.id;
+      picker.closest('details').open=true;
+      const uid=el('bindProfile').elements.uid;
+      uid.focus();uid.scrollIntoView({block:'center'});
     };
     el('profileHours').onclick=()=>{navigate('horas');if(page==='horas')openManual(person.id)};
     view.querySelectorAll('[data-task]').forEach(b=>b.onclick=()=>navigate(b.dataset.task));
