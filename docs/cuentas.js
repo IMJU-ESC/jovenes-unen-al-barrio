@@ -1,5 +1,4 @@
-import {createUserWithEmailAndPassword,sendEmailVerification,sendPasswordResetEmail,verifyBeforeUpdateEmail} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {collection,doc,getDocs,query,runTransaction,where} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {collection,createUserWithEmailAndPassword,doc,getDocs,query,runTransaction,sendEmailVerification,sendPasswordResetEmail,verifyBeforeUpdateEmail,where} from './firebase-sdk-11.10.0.js';
 
 const alias='@acceso.imju.invalid';
 const idPattern=/^[a-zA-Z0-9]{20,64}$/;

@@ -1,7 +1,5 @@
+import {collection,createUserWithEmailAndPassword,deleteApp,doc,getDocsFromServer,inMemoryPersistence,initializeApp,initializeAuth,query,runTransaction,signInWithEmailAndPassword,updateDoc,where} from './firebase-sdk-11.10.0.js';
 import {imageCanvas} from './credencial.js';
-import {initializeApp,deleteApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
-import {initializeAuth,inMemoryPersistence,createUserWithEmailAndPassword,signInWithEmailAndPassword} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {doc,runTransaction,updateDoc,collection,query,where,getDocsFromServer} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
 
 const fields = [
   ['nombre','Nombre completo'], ['comunidad','Comunidad'], ['generacion','Generación'],
