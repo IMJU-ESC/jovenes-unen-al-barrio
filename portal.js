@@ -1,14 +1,14 @@
+import {browserLocalPersistence,browserSessionPersistence,collection,doc,getDoc,getDocs,getDocsFromServer,indexedDBLocalPersistence,initializeApp,initializeAuth,initializeFirestore,onAuthStateChanged,query,runTransaction,setDoc,signInWithEmailAndPassword,signOut,updateDoc,updatePassword,where} from './firebase-sdk-11.10.0.js';
 import {icon,navigation} from './navegacion.js';
 import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js';
-import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js';
-import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js';
-import {manageRoster} from './padron.js';
-import {initializeApp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
-import {getAuth,onAuthStateChanged,signInWithEmailAndPassword,signOut,updatePassword} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,collection,getDoc,getDocs,getDocsFromServer,setDoc,updateDoc,runTransaction,query,where} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=red1';
+import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=red1';
+import {manageRoster} from './padron.js?v=red1';
 
 const app=initializeApp(await (await fetch('./firebase-web.json')).json());
-const auth=getAuth(app), db=getFirestore(app);
+const auth=initializeAuth(app,{persistence:[indexedDBLocalPersistence,browserLocalPersistence,browserSessionPersistence]});
+const redMovil=new URLSearchParams(location.search).get('red')==='movil';
+const db=initializeFirestore(app,redMovil?{experimentalForceLongPolling:true,experimentalLongPollingOptions:{timeoutSeconds:10}}:{});
 const el=id=>document.getElementById(id);
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const stamp=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Mazatlan'}).format(new Date());
@@ -30,7 +30,7 @@ accountForms(auth,form,notice);
 form('loginForm',async d=>{await signInWithEmailAndPassword(auth,d.user.trim().toLowerCase()+(d.user.includes('@')?'':'@acceso.imju.invalid'),d.pass);el('loginForm').reset()});
 el('logout').onclick=()=>{if(guard())action(()=>signOut(auth))};
 
-onAuthStateChanged(auth,user=>{revision++;page='inicio';profileId='';directoryQuery='';dirty=false;lastScan='';selectedEvent='';stopCamera();content.replaceChildren();people=[];activities=[];records=[];access=null;notice('');el('login').hidden=!!user;el('account').hidden=!user;if(user){content.innerHTML='<p role="status" class="card">Cargando tu panel…</p>';action(async()=>{try{await load(user)}catch(err){if(auth.currentUser?.uid===user.uid){content.innerHTML='<button id="retry">Volver a cargar mi panel</button>';el('retry').onclick=()=>action(()=>load(user))}throw err}})}});
+onAuthStateChanged(auth,user=>{revision++;page='inicio';profileId='';directoryQuery='';dirty=false;lastScan='';selectedEvent='';stopCamera();content.replaceChildren();people=[];activities=[];records=[];access=null;notice('');el('login').hidden=!!user;el('account').hidden=!user;if(user){content.innerHTML='<p role="status" class="card">Cargando tu panel…</p>'+(redMovil?'':'<a href="?red=movil">¿Tarda en abrir? Probar conexión móvil</a>');action(async()=>{try{await load(user)}catch(err){if(auth.currentUser?.uid===user.uid){content.innerHTML='<button id="retry">Volver a cargar mi panel</button>'+(redMovil?'':'<a href="?red=movil">Probar conexión móvil</a>');el('retry').onclick=()=>action(()=>load(user))}throw err}})}});
 async function load(user){
  const seq=++revision;stopCamera();const s=await getDoc(doc(db,'accesos',user.uid));if(seq!==revision)return;
  if(!s.exists()){awaitActivation({user,db,content,notice,action,refresh:()=>load(user)});return}

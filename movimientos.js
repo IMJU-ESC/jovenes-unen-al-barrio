@@ -1,4 +1,4 @@
-import {collection,doc,query,where,getDocsFromServer,runTransaction,increment} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import {collection,doc,getDocsFromServer,increment,query,runTransaction,where} from './firebase-sdk-11.10.0.js';
 
 const caps={actividad:80,aprendizaje:10};
 const key=r=>r?JSON.stringify([r.fecha,r.titulo,r.horas,r.estado,r.categoria,r.nota||'',r.evidencia||'',r.tipo]):null;
