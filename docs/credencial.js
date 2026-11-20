@@ -1,3 +1,19 @@
+const scripts=new Map();
+export function cargarQR(nombre){
+  if(window[nombre])return Promise.resolve();
+  if(!scripts.has(nombre)){
+    const carga=new Promise((resolve,reject)=>{
+      const script=document.createElement('script');
+      script.src=nombre==='jsQR'?'./jsQR.js':'./qrcode.js';
+      script.onload=()=>window[nombre]?resolve():reject(Error('No se pudo iniciar el lector de QR.'));
+      script.onerror=()=>{script.remove();reject(Error('No se pudo descargar el módulo QR. Revisa la conexión y vuelve a intentar.'))};
+      document.head.append(script);
+    }).catch(error=>{scripts.delete(nombre);throw error});
+    scripts.set(nombre,carga);
+  }
+  return scripts.get(nombre);
+}
+
 export async function loadImage(source) {
   const image = new Image();
   image.src = source;
@@ -125,6 +141,7 @@ export function badgeQR(person){
 }
 
 export async function saveRosterBadges(people,progress){
+  await cargarQR('qrcode');
   const images=[];
   for(const person of people){
     progress(images.length+1,people.length);

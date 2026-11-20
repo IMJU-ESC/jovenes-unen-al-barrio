@@ -1,5 +1,5 @@
 import {icon,navigation} from './navegacion.js';
-import {decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js';
+import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js';
 import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js';
 import {manageRoster} from './padron.js';
@@ -18,7 +18,7 @@ let profileId='', directoryQuery='';
 let page='inicio', cameraVersion=0, selectedEvent='',lastScan='',dirty=false;
 function stopCamera(){cameraVersion++;cancelAnimationFrame(frame);stream?.getTracks().forEach(t=>t.stop());stream=null}
 function notice(s){el('notice').textContent=s}
-function report(e){notice(e.code==='auth/invalid-credential'?'Revisa tu usuario y contraseña.':e.code==='permission-denied'?'Tu cuenta no tiene acceso a estos datos.':e.message||'No se pudo completar la operación.')}
+function report(e){if(!navigator.onLine||['unavailable','auth/network-request-failed','deadline-exceeded'].includes(e.code)){notice('Se interrumpió la conexión. Comprueba tus datos móviles y vuelve a intentar.');return}notice(e.code==='auth/invalid-credential'?'Revisa tu usuario y contraseña.':e.code==='permission-denied'?'Tu cuenta no tiene acceso a estos datos.':e.message||'No se pudo completar la operación.')}
 async function action(fn,button){if(button?.disabled)return;if(button)button.disabled=true;notice('');try{await fn()}catch(e){report(e)}finally{if(button)button.disabled=false}}
 function form(id,fn){el(id).onsubmit=e=>{e.preventDefault();const f=e.currentTarget;action(()=>fn(Object.fromEntries(new FormData(f))),f.querySelector('button[type=submit],button:not([type])'))}}
 function field(label,name,type='text',extra=''){return '<label>'+label+'<input name="'+name+'" type="'+type+'" '+extra+' required></label>'}
@@ -145,10 +145,13 @@ function agendaList(list){
   return list.length?list.map(a=>'<article class="event"><time datetime="'+escape(a.fecha)+'"><b>'+escape(a.fecha.slice(8))+'</b>'+escape(new Date(a.fecha+'T12:00:00').toLocaleString('es-MX',{month:'short'}))+'</time><div><strong>'+escape(a.titulo)+'</strong><p>'+escape([a.hora,a.lugar,a.categoria,a.horas+' h'].filter(Boolean).join(' · '))+'</p>'+(a.descripcion?'<p>'+escape(a.descripcion)+'</p>':'')+'</div></article>').join(''):'<p class="empty">Sin actividades programadas en este mes.</p>';
 }
 function badge(view,p,showFields=true){
-  const url=badgeQR(p);
-  view.innerHTML='<section class="gafete-panel"><div class="gafete-preview" aria-live="polite">Preparando la credencial…</div><div class="gafete-actions"><h3>Credencial individual</h3><p>Gafete de 8.5 × 11.5 cm con vigencia de octubre de 2026 a octubre de 2027. Coloca el sello sobre el borde de la foto, dejando visible el rostro. Imprime el PDF en hoja carta al 100 % y recorta por las marcas.</p><button class="pdf" disabled>Descargar PDF para imprimir</button><button class="png light" disabled>Guardar imagen para celular</button><a class="action-link" href="'+url+'" download="QR-IMJU.gif">Descargar solo el QR</a></div></section>'+(showFields?'<section class="card"><h3>Mi expediente</h3>'+personFields(p)+'</section>':'');
+  view.innerHTML='<section class="gafete-panel"><div class="gafete-preview" aria-live="polite">Preparando la credencial…</div><div class="gafete-actions"><h3>Credencial individual</h3><p>Gafete de 8.5 × 11.5 cm con vigencia de octubre de 2026 a octubre de 2027. Coloca el sello sobre el borde de la foto, dejando visible el rostro. Imprime el PDF en hoja carta al 100 % y recorta por las marcas.</p><button class="pdf" disabled>Descargar PDF para imprimir</button><button class="png light" disabled>Guardar imagen para celular</button><a class="action-link" hidden download="QR-IMJU.gif">Descargar solo el QR</a></div></section>'+(showFields?'<section class="card"><h3>Mi expediente</h3>'+personFields(p)+'</section>':'');
   const preview=view.querySelector('.gafete-preview'),pdf=view.querySelector('.pdf'),png=view.querySelector('.png');
-  renderBadge(p,url).then(canvas=>{
+  cargarQR('qrcode').then(()=>{
+    const url=badgeQR(p),link=view.querySelector('a[download]');
+    if(preview.isConnected){link.href=url;link.hidden=false}
+    return renderBadge(p,url);
+  }).then(canvas=>{
     if(!preview.isConnected)return;
     canvas.setAttribute('role','img');canvas.setAttribute('aria-label','Credencial de '+p.nombre+' · '+p.usuario+' con QR y vigencia');
     preview.replaceChildren(canvas);
@@ -430,6 +433,8 @@ function scannerTools(root,a,reload){
     idle();const version=cameraVersion;
     start.disabled=file.disabled=true;stop.hidden=false;
     try{
+      await cargarQR('jsQR');
+      if(version!==cameraVersion||!video.isConnected)return;
       if(!navigator.mediaDevices?.getUserMedia)throw Error('Cámara no disponible.');
       const media=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
       if(version!==cameraVersion||!video.isConnected){media.getTracks().forEach(t=>t.stop());return}
@@ -455,13 +460,13 @@ function scannerTools(root,a,reload){
         if(version===cameraVersion)frame=requestAnimationFrame(tick);
       }
       frame=requestAnimationFrame(tick);
-    }catch(e){if(version===cameraVersion){idle();result.textContent='No se pudo usar la cámara. Revisa el permiso del navegador o pulsa Leer imagen del QR.'}}
+    }catch(e){if(version===cameraVersion){idle();result.textContent=e.message?.includes('módulo QR')?e.message:'No se pudo usar la cámara. Revisa el permiso del navegador o pulsa Leer imagen del QR.'}}
   };
   stop.onclick=idle;
   file.onchange=async()=>{
     const image=file.files[0];file.value='';if(!image)return;idle();const version=cameraVersion;
     start.disabled=file.disabled=true;
-    try{const code=decode(await imageCanvas(image,1600),true);if(version!==cameraVersion)return;if(!code)throw Error('No se encontró un QR. Prueba con una imagen nítida del código completo.');await register(code)}
+    try{await cargarQR('jsQR');const code=decode(await imageCanvas(image,1600),true);if(version!==cameraVersion)return;if(!code)throw Error('No se encontró un QR. Prueba con una imagen nítida del código completo.');await register(code)}
     catch(e){result.textContent=e.message}
     finally{if(version===cameraVersion)start.disabled=file.disabled=false}
   };
