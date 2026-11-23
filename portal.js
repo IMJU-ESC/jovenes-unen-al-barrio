@@ -475,16 +475,34 @@ function scannerTools(root,a,reload){
 function roster(root,a,reload){
   const prior=new Map(records.filter(r=>r.id===a.id).map(r=>[r.person,r]));
   const active=people.filter(p=>(!a.listaCerrada&&convocado(p,a))||prior.has(p.id));
-  root.insertAdjacentHTML('beforeend','<form id="bulk"><div class="quick"><button type="button" class="light" id="allPresent">Marcar pendientes como presentes</button></div><div id="group"></div><button>Guardar lista</button></form>');
+  root.insertAdjacentHTML('beforeend','<label>Buscar joven<input type="search" id="rosterSearch" placeholder="Nombre, apellido o usuario" autocomplete="off" enterkeyhint="search"></label><p id="rosterCount" role="status"></p><form id="bulk"><div class="quick"><button type="button" class="light" id="allPresent">Marcar pendientes como presentes</button></div><div id="group"></div><button>Guardar lista</button></form>');
+  const normalize=value=>String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   for(const p of active){
     const r=prior.get(p.id), row=document.createElement('div');row.className='list-row';row.dataset.id=p.id;
+    row.dataset.search=normalize([p.nombre,p.usuario].join(' '));
     row.innerHTML='<strong>'+escape(p.nombre)+'</strong><label>Asistencia<select name="state"><option value="">Sin registrar</option>'+states+'</select></label><label>Horas<input type="number" name="hours" min="0" max="24" step="1"></label><label><span class="nota-label">Observaciones</span><input name="note" maxlength="240"></label>'+adjunto;
     const state=row.querySelector('select'),hours=row.querySelector('[name=hours]');state.value=r?.estado||'';hours.value=r?.horas??a.horas;hours.disabled=state.value!=='presente';row.querySelector('[name=note]').value=r?.nota||'';
     ajustarJustificante(row,state.value);
     state.onchange=()=>{ajustarJustificante(row,state.value);hours.disabled=state.value!=='presente';hours.value=hours.disabled?0:(r?.estado==='presente'?r.horas:a.horas)};
     el('group').append(row);
   }
-  el('allPresent').onclick=()=>{for(const select of el('group').querySelectorAll('select'))if(!select.value){select.value='presente';select.onchange();dirty=true}};
+  const search=el('rosterSearch'),group=el('group'),bulkButton=el('allPresent');
+  function filterRoster(){
+    const words=normalize(search.value).trim().split(/\s+/).filter(Boolean);
+    let shown=0;
+    for(const row of group.children){
+      const matches=words.every(word=>row.dataset.search.includes(word));
+      row.hidden=!matches;
+      row.style.display=matches?'':'none';
+      if(matches)shown++;
+    }
+    el('rosterCount').textContent=shown?shown+' de '+active.length+' jóvenes':'Sin coincidencias';
+    bulkButton.disabled=!shown;
+    bulkButton.textContent=words.length?'Marcar pendientes visibles como presentes':'Marcar pendientes como presentes';
+  }
+  search.oninput=filterRoster;
+  filterRoster();
+  el('allPresent').onclick=()=>{for(const select of group.querySelectorAll('.list-row:not([hidden]) select'))if(!select.value){select.value='presente';select.onchange();dirty=true}};
   form('bulk',async()=>{
     const changes=[];
     for(const row of el('group').children){
