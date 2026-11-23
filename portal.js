@@ -197,8 +197,8 @@ async function actividadesDelPerfil(root,p,reload){
   root.querySelector('p').textContent=activities.length?'Asistencia de '+p.nombre+' · Todos los meses':'Aún no hay actividades publicadas.';
   for(const a of [...activities].reverse()){
     const previo=porEvento.get(a.id),row=document.createElement('article');row.className='event';
-    const editable=Boolean(previo)||(!a.listaCerrada&&convocado(p,a));
-    const estado=previo?labelState(previo.estado):!convocado(p,a)?'Fuera de convocatoria':a.listaCerrada?'Lista cerrada · Sin registro':'Sin registrar';
+    const editable=Boolean(previo)||p.activo;
+    const estado=previo?labelState(previo.estado):!p.activo?'Participante inactivo':a.listaCerrada?'Lista cerrada · Sin registro':'Sin registrar';
     row.innerHTML='<div><strong>'+escape(a.titulo)+'</strong><p>'+escape(fullDate(a.fecha)+' de '+a.fecha.slice(0,4))+' · '+escape(estado)+'</p>'+(editable?'<button type="button" class="light">'+(previo?'Corregir registro':'Registrar asistencia')+'</button>':'')+'</div>';
     root.append(row);
     if(!editable)continue;
@@ -308,6 +308,10 @@ function attendanceView(view,monthly,reload,scanner){
   const options=monthly.filter(a=>a.fecha<=stamp());
   if(!options.some(a=>a.id===selectedEvent))selectedEvent=options.find(a=>a.fecha===stamp())?.id||(options.length===1?options[0].id:'');
   view.innerHTML='<section class="card"><label>Actividad<select id="pickEvent"><option value="">Elige la actividad</option>'+opts(options,a=>fullDate(a.fecha)+' · '+a.titulo)+'</select></label><div id="sessionTools"></div></section>';
+  if(!scanner){
+    view.insertAdjacentHTML('afterbegin','<button type="button" id="chooseIndividual">Pasar lista individual</button>');
+    el('chooseIndividual').onclick=()=>navigate('padron');
+  }
   const picker=el('pickEvent');picker.value=selectedEvent;
   picker.onchange=()=>{if(!guard()){picker.value=selectedEvent;return}dirty=false;selectedEvent=picker.value;lastScan='';draw(true)};
   const a=options.find(a=>a.id===selectedEvent),root=el('sessionTools');
@@ -426,7 +430,7 @@ function scannerTools(root,a,reload){
     try{
       const person=code.startsWith('IMJU-JB:1:')&&people.find(p=>p.id===code.slice(10)&&p.activo);
       if(!person)throw Error('El QR no corresponde a un participante activo.');
-      if(!convocado(person,a)||(a.listaCerrada&&!records.some(r=>r.person===person.id&&r.id===a.id)))throw Error('Este joven no figura en la lista de esa actividad.');
+      
       const version=cameraVersion;
       const confirmed=await solicitar(root,'Confirmar asistencia',avatar(person)+'<h4>'+escape(person.nombre)+'</h4><p>Usuario · '+escape(person.usuario)+'</p><p>'+escape(a.titulo)+' · '+escape(fullDate(a.fecha))+' · '+escape(a.horas)+' h</p>','Confirmar asistencia',()=>true);
       if(!confirmed||!root.isConnected||version!==cameraVersion){result.textContent='Lectura cancelada.';return}
@@ -485,7 +489,7 @@ function scannerTools(root,a,reload){
 }
 function roster(root,a,reload){
   const prior=new Map(records.filter(r=>r.id===a.id).map(r=>[r.person,r]));
-  const active=people.filter(p=>(!a.listaCerrada&&convocado(p,a))||prior.has(p.id));
+  const active=people.filter(p=>p.activo||prior.has(p.id));
   root.insertAdjacentHTML('beforeend','<label>Buscar joven<input type="search" id="rosterSearch" placeholder="Nombre, apellido o usuario" autocomplete="off" enterkeyhint="search"></label><p id="rosterCount" role="status"></p><form id="bulk"><div class="quick"><button type="button" class="light" id="allPresent">Marcar pendientes como presentes</button></div><div id="group"></div><button>Guardar lista</button></form>');
   const normalize=value=>String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   for(const p of active){
