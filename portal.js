@@ -180,18 +180,28 @@ async function cerrarLista(a,list){
     if(!current.listaCerrada)tx.update(ref,{listaCerrada:true});
   });
 }
-function actividadesDelPerfil(root,p,reload){
-  const porEvento=new Map(records.filter(r=>r.person===p.id&&r.tipo!=='manual').map(r=>[r.id,r]));
-  const eventos=activities.filter(a=>a.fecha.startsWith(selectedMonth)&&(porEvento.has(a.id)||(!a.listaCerrada&&convocado(p,a))));
-  const pendientes=eventos.filter(a=>!porEvento.has(a.id));
-  root.innerHTML='<h3>Actividades pendientes · '+pendientes.length+'</h3>';
-  if(!pendientes.length)root.insertAdjacentHTML('beforeend','<p>No hay actividades pendientes en el mes seleccionado.</p>');
-  const anteriores=document.createElement('details');
-  anteriores.innerHTML='<summary>Ver registros del mes</summary>';
-  for(const a of eventos){
+async function actividadesDelPerfil(root,p,reload){
+  root.innerHTML='<h3 tabindex="-1">Pasar lista individual</h3><p role="status">Cargando actividades…</p>';
+  let historial;
+  try{
+    historial=snapshot(await getDocsFromServer(collection(db,'participantes',p.id,'registros')));
+  }catch(error){
+    if(!root.isConnected)return;
+    root.querySelector('p').textContent='No se pudo cargar el historial de este joven.';
+    const retry=document.createElement('button');
+    retry.textContent='Volver a intentar';retry.onclick=()=>actividadesDelPerfil(root,p,reload);root.append(retry);
+    return;
+  }
+  if(!root.isConnected)return;
+  const porEvento=new Map(historial.filter(r=>r.tipo!=='manual').map(r=>[r.id,r]));
+  root.querySelector('p').textContent=activities.length?'Asistencia de '+p.nombre+' · Todos los meses':'Aún no hay actividades publicadas.';
+  for(const a of [...activities].reverse()){
     const previo=porEvento.get(a.id),row=document.createElement('article');row.className='event';
-    row.innerHTML='<div><strong>'+escape(a.titulo)+'</strong><p>'+escape(fullDate(a.fecha))+' · '+escape(previo?labelState(previo.estado):'Sin registrar')+'</p><button class="light">'+(previo?'Corregir':'Registrar')+'</button></div>';
-    (previo?anteriores:root).append(row);
+    const editable=Boolean(previo)||(!a.listaCerrada&&convocado(p,a));
+    const estado=previo?labelState(previo.estado):!convocado(p,a)?'Fuera de convocatoria':a.listaCerrada?'Lista cerrada · Sin registro':'Sin registrar';
+    row.innerHTML='<div><strong>'+escape(a.titulo)+'</strong><p>'+escape(fullDate(a.fecha)+' de '+a.fecha.slice(0,4))+' · '+escape(estado)+'</p>'+(editable?'<button type="button" class="light">'+(previo?'Corregir registro':'Registrar asistencia')+'</button>':'')+'</div>';
+    root.append(row);
+    if(!editable)continue;
     row.querySelector('button').onclick=e=>action(async()=>{
       const futuro=a.fecha>stamp();
       const opciones=futuro?'<option value="no_aplica">No aplica</option>':'<option value="">Elige un estado</option>'+states;
@@ -211,13 +221,14 @@ function actividadesDelPerfil(root,p,reload){
       await reload('Registro guardado · '+labelState(next.estado));
     },e.currentTarget);
   }
-  if(eventos.length>pendientes.length)root.append(anteriores);
 }
 function directory(view,reload){
   const person=people.find(p=>p.id===profileId);
   if(person){
-    view.innerHTML='<button class="light" id="backDirectory">← Volver al directorio</button><section class="profile-head">'+avatar(person)+'<div><h3>'+escape(person.nombre)+'</h3><p>Usuario del padrón · <strong>'+escape(person.usuario)+'</strong></p></div></section><div class="quick profile-controls"><button id="profileEdit">Editar expediente</button><button class="light" id="profileAccess" '+(person.activo?'':'disabled')+'>Recuperar acceso</button><button id="profileHours" '+(person.activo?'':'disabled')+'>Sumar horas</button><button class="light" data-task="qr">Escanear QR</button><button class="light" data-task="lista">Pasar lista</button></div><section id="perfilAsistencia" class="card"></section><section class="card"><h3>Datos del joven</h3>'+personFields(person)+'<p><strong>'+sum(records.filter(r=>r.person===person.id))+' h</strong> acreditadas en el mes seleccionado</p></section><div id="profileBadge"></div><section id="profileEditor" hidden></section>';
-    actividadesDelPerfil(el('perfilAsistencia'),person,reload);
+    view.innerHTML='<button class="light" id="backDirectory">← Volver al directorio</button><section class="profile-head">'+avatar(person)+'<div><h3>'+escape(person.nombre)+'</h3><p>Usuario del padrón · <strong>'+escape(person.usuario)+'</strong></p></div></section><div class="quick profile-controls"><button id="profileEdit">Editar expediente</button><button class="light" id="profileAccess" '+(person.activo?'':'disabled')+'>Recuperar acceso</button><button id="profileHours" '+(person.activo?'':'disabled')+'>Sumar horas</button><button class="light" data-task="qr">Escanear QR</button><button type="button" id="profileAttendance">Pasar lista individual</button></div><section id="perfilAsistencia" class="card"></section><section class="card"><h3>Datos del joven</h3>'+personFields(person)+'<p><strong>'+sum(records.filter(r=>r.person===person.id))+' h</strong> acreditadas en el mes seleccionado</p></section><div id="profileBadge"></div><section id="profileEditor" hidden></section>';
+    const attendance=el('perfilAsistencia');
+    actividadesDelPerfil(attendance,person,reload);
+    el('profileAttendance').onclick=()=>{attendance.querySelector('h3').focus();attendance.scrollIntoView({block:'start'})};
     badge(el('profileBadge'),person,false);
     const editor=el('profileEditor');
     el('profileEdit').onclick=()=>{
