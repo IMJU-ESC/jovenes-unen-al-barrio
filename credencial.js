@@ -1,3 +1,4 @@
+import {marca} from './marca.js';
 import {prefijoQR} from './dependencias.js';
 const scripts=new Map();
 export function cargarQR(nombre){
@@ -45,7 +46,7 @@ export function decode(canvas,tryBadge=false){
 
 // Doce píxeles por milímetro, tanto para la vista previa como para el archivo impreso.
 const width=1020, height=1380;
-const logoFiles=['sspc','escudo','municipio','imju'];
+const logoFiles=['sspc','escudo','municipio',marca?.archivo||'imju'];
 
 function drawName(ctx,name){
   const words=name.trim().split(/\s+/);
@@ -92,17 +93,17 @@ export async function renderBadge(person,qr){
   const ctx=canvas.getContext('2d');
   ctx.fillStyle='#fff';ctx.fillRect(0,0,width,height);
   logos.forEach((logo,i)=>{
-    const scale=Math.min(170/logo.width,112/logo.height);
+    const scale=Math.min((marca&&i===3?222:170)/logo.width,(marca&&i===3?126:112)/logo.height);
     const w=logo.width*scale,h=logo.height*scale;
     ctx.drawImage(logo,(i+.5)*width/4-w/2,75-h/2,w,h);
   });
-  ctx.fillStyle='#582336';ctx.fillRect(0,150,width,110);
+  ctx.fillStyle=marca?.principal||'#582336';ctx.fillRect(0,150,width,110);
   ctx.fillStyle='#fff';ctx.font='bold 55px Georgia,serif';
   ctx.fillText('Jóvenes que Unen al Barrio',38,222,944);
-  ctx.fillStyle='#ac8a56';ctx.fillRect(0,260,width,6);
-  ctx.fillStyle='#faf8f3';ctx.fillRect(0,266,width,654);
+  ctx.fillStyle=marca?.acento||'#ac8a56';ctx.fillRect(0,260,width,6);
+  ctx.fillStyle=marca?.fondo||'#faf8f3';ctx.fillRect(0,266,width,654);
   drawPortrait(ctx,photo,person.nombre);
-  ctx.fillStyle='#704852';ctx.font='bold 23px sans-serif';ctx.fillText('CREDENCIAL DE PARTICIPANTE',532,325,446);
+  ctx.fillStyle=marca?.principal||'#704852';ctx.font='bold 23px sans-serif';ctx.fillText('CREDENCIAL DE PARTICIPANTE',532,325,446);
   ctx.fillStyle='#272429';drawName(ctx,person.nombre);
   ctx.fillStyle='#c2b194';ctx.fillRect(532,695,446,2);
   const fields=[['Usuario del padrón',person.usuario||'Sin registrar'],['Comunidad',person.comunidad],['Generación',person.generacion]].filter(([,value])=>value);
@@ -112,16 +113,16 @@ export async function renderBadge(person,qr){
     ctx.fillStyle='#30262a';ctx.font='bold 29px sans-serif';ctx.fillText(value,532,y+33,446);
   });
   if(!person.activo){
-    ctx.fillStyle='#582336';ctx.fillRect(38,841,454,51);
+    ctx.fillStyle=marca?.principal||'#582336';ctx.fillRect(38,841,454,51);
     ctx.fillStyle='white';ctx.font='bold 26px sans-serif';ctx.fillText('INACTIVO',56,875);
   }
   ctx.imageSmoothingEnabled=false;ctx.drawImage(code,50,944,363,363);ctx.imageSmoothingEnabled=true;
-  ctx.fillStyle='#704852';ctx.font='bold 26px sans-serif';ctx.fillText('VIGENCIA DEL GAFETE',468,1050);
+  ctx.fillStyle=marca?.principal||'#704852';ctx.font='bold 26px sans-serif';ctx.fillText('VIGENCIA DEL GAFETE',468,1050);
   ctx.fillStyle='#30262a';ctx.font='bold 38px Georgia,serif';ctx.fillText('Octubre 2026',468,1124);
   ctx.fillText('a octubre 2027',468,1180);
-  ctx.fillStyle='#ac8a56';ctx.fillRect(468,1213,420,3);
+  ctx.fillStyle=marca?.acento||'#ac8a56';ctx.fillRect(468,1213,420,3);
   ctx.fillStyle='#56534d';ctx.font='25px sans-serif';ctx.fillText('QR de asistencia',126,1342);
-  ctx.fillStyle='#582336';ctx.fillRect(0,1364,width,16);
+  ctx.fillStyle=marca?.principal||'#582336';ctx.fillRect(0,1364,width,16);
   return canvas;
 }
 function saveBlob(blob,name){
@@ -150,7 +151,7 @@ export async function saveRosterBadges(people,progress){
     images.push(await encodeCanvas(canvas,'image/jpeg',.96));
     canvas.width=canvas.height=1;
   }
-  await badgePdf(images,'Gafetes-IMJU-2026-2027',true);
+  await badgePdf(images,'Gafetes-'+(marca?.archivo||'IMJU')+'-2026-2027',true);
 }
 
 async function badgePdf(images,filename,grouped){

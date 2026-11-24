@@ -2,11 +2,11 @@ import {prefijoQR} from './dependencias.js';
 import {espacio,dependencia,nombreDependencia,dominioUsuario,enlace} from './dependencias.js';
 import {acumularHoras,mostrarAvance} from './avance-horas.js';
 import {browserLocalPersistence,browserSessionPersistence,collection,doc,getDoc,getDocs,getDocsFromServer,indexedDBLocalPersistence,initializeApp,initializeAuth,initializeFirestore,onAuthStateChanged,query,runTransaction,setDoc,signInWithEmailAndPassword,signOut,updateDoc,updatePassword,where} from './firebase-sdk-11.10.0.js';
-import {icon,navigation} from './navegacion.js';
-import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js?v=sedes1';
+import {icon,navigation} from './navegacion.js?v=logos1';
+import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js?v=logos1';
 import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=sedes1';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=sedes1';
-import {manageRoster,cambiarEstado} from './padron.js?v=sedes1';
+import {manageRoster,cambiarEstado} from './padron.js?v=logos1';
 
 const app=initializeApp(await (await fetch('./firebase-web.json')).json());
 const auth=initializeAuth(app,{persistence:[indexedDBLocalPersistence,browserLocalPersistence,browserSessionPersistence]});

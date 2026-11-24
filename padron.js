@@ -1,7 +1,7 @@
 import {espacio,dominioUsuario} from './dependencias.js';
 import {limiteFaltas} from './movimientos.js?v=sedes1';
 import {collection,createUserWithEmailAndPassword,deleteApp,doc,getDocsFromServer,inMemoryPersistence,initializeApp,initializeAuth,query,runTransaction,signInWithEmailAndPassword,updateDoc,where} from './firebase-sdk-11.10.0.js';
-import {imageCanvas} from './credencial.js?v=sedes1';
+import {imageCanvas} from './credencial.js?v=logos1';
 
 const fields = [
   ['nombre','Nombre completo'], ['comunidad','Comunidad'], ['generacion','Generación'],

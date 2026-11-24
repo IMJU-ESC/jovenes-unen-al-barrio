@@ -1,3 +1,4 @@
+import {marca} from './marca.js';
 const paths = {
   inicio: 'M3 10 12 3l9 7v10h-6v-6H9v6H3Z',
   qr: 'M3 8V3h5m8 0h5v5M3 16v5h5m8 0h5v-5M7 7h3v3H7zm7 0h3v3h-3zm-7 7h3v3H7zm7 0h3v3h-3z',
@@ -20,7 +21,7 @@ export function navigation(pages, current, admin) {
   const short = {inicio:'Inicio',qr:'Escanear',lista:'Lista',padron:'Jóvenes',gafete:'Gafete',horas:'Horas',agenda:'Agenda'};
   const button = (id,label) => '<button type="button" data-page="'+id+'" '+(current===id?'aria-current="page"':'')+'>'+icon(id)+'<span>'+label+'</span></button>';
   const rest = Object.keys(pages).filter(id=>!primary.includes(id));
-  const desktop = '<nav class="rail" aria-label="Navegación principal"><div class="rail-brand"><img src="./insignia.svg" alt=""><strong>Jóvenes que<br>unen al barrio</strong></div>'+Object.entries(pages).map(([id,label])=>button(id,label)).join('')+'</nav>';
+  const desktop = '<nav class="rail" aria-label="Navegación principal"><div class="rail-brand"><img src="./'+(marca?marca.archivo+'.webp':'insignia.svg')+'" alt=""><strong>Jóvenes que<br>unen al barrio</strong></div>'+Object.entries(pages).map(([id,label])=>button(id,label)).join('')+'</nav>';
   const mobile = '<nav class="dock" aria-label="Navegación móvil">'+primary.map(id=>button(id,short[id])).join('')+'<details class="nav-more" '+(!primary.includes(current)?'data-active':'')+'><summary>'+icon('mas')+'Más</summary><div>'+rest.map(id=>button(id,pages[id])).join('')+'</div></details></nav>';
   return desktop+mobile;
 }
