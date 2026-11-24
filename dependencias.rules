@@ -1,0 +1,46 @@
+// Incorporar dentro de match /databases/{database}/documents de las reglas vigentes.
+// Plantilla: configurar en Firebase el correo verificado de cada titular antes de publicar.
+match /dependencias/{sede} {
+  function identificada() {
+    return request.auth != null && sede in ['mujer', 'atencion-ciudadana'];
+  }
+  function titular() {
+    return identificada() && request.auth.token.email_verified == true &&
+      ((sede == 'mujer' && request.auth.token.email.lower() == 'SUSTITUIR_MUJER') ||
+       (sede == 'atencion-ciudadana' && request.auth.token.email.lower() == 'SUSTITUIR_ATENCION'));
+  }
+  function cuentaLocal() {
+    return get(/databases/$(database)/documents/dependencias/$(sede)/accesos/$(request.auth.uid)).data;
+  }
+  function habilitada() {
+    return identificada() && cuentaLocal().activo == true && cuentaLocal().listo == true;
+  }
+  function coordina() {
+    return titular() && habilitada() && cuentaLocal().participante == 'ADMIN';
+  }
+  function expedientePropio(id) {
+    return habilitada() && cuentaLocal().participante == id && id != 'ADMIN';
+  }
+  match /accesos/{uid} {
+    allow get: if identificada() && (request.auth.uid == uid || coordina());
+    allow list: if coordina();
+    allow create: if (titular() && uid == request.auth.uid && request.resource.data == {'participante':'ADMIN','activo':true,'listo':true}) || (coordina() && request.resource.data.participante is string && request.resource.data.participante != 'ADMIN');
+    allow update: if (coordina() && resource.data.participante != 'ADMIN'
+      && request.resource.data.participante == resource.data.participante)
+      || (identificada() && request.auth.uid == uid && resource.data.activo == true
+      && resource.data.listo == false && request.resource.data.listo == true
+      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['listo']));
+  }
+  match /participantes/{id} {
+    allow read: if coordina() || expedientePropio(id);
+    allow write: if coordina();
+    match /registros/{registro} {
+      allow read: if coordina() || expedientePropio(id);
+      allow write: if coordina();
+    }
+  }
+  match /actividades/{id} {
+    allow read: if habilitada();
+    allow write: if coordina();
+  }
+}

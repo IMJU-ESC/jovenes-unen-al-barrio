@@ -1,3 +1,4 @@
+import {espacio} from './dependencias.js';
 import {collection,doc,getDocsFromServer,increment,query,runTransaction,where} from './firebase-sdk-11.10.0.js';
 
 const caps={actividad:80,aprendizaje:10};
@@ -18,7 +19,7 @@ function ajustarMes(meses,registro,delta){
 }
 export async function prepararAsistencia(db,profile,admin){
   if(profile.faltasPorMes)return profile;
-  const ref=doc(db,'participantes',profile.id);
+  const ref=doc(espacio(db),'participantes',profile.id);
   if(!admin)return {...profile,faltasPorMes:await contarFaltas(ref)};
   const data=await runTransaction(db,async tx=>{
     const current=(await tx.get(ref)).data();
@@ -36,12 +37,12 @@ export async function saveRows(db,changes,activity=null,scan=false){
   if(!changes.length)return [];
   return runTransaction(db,async tx=>{
     if(activity){
-      const latest=(await tx.get(doc(db,'actividades',activity.id))).data();
+      const latest=(await tx.get(doc(espacio(db),'actividades',activity.id))).data();
       if(scan==='cierre'&&latest?.listaCerrada)return [];
       if(!latest||['fecha','horas','categoria','titulo'].some(k=>latest[k]!==activity[k]))throw Error('La actividad cambió. Actualiza el panel antes de registrar.');
     }
     const plans=await Promise.all(changes.map(async c=>{
-      const person=doc(db,'participantes',c.person), record=doc(collection(person,'registros'),c.id);
+      const person=doc(espacio(db),'participantes',c.person), record=doc(collection(person,'registros'),c.id);
       const [profile,current]=await Promise.all([tx.get(person),tx.get(record)]);
       if(scan==='cierre'&&(!profile.exists()||!profile.data().activo||profile.data().muestra||profile.data().fechaAlta>activity.fecha))return {omitido:true};
       if(!profile.exists()||(!profile.data().activo&&!c.prior))throw Error('Participante inactivo o sin expediente.');
