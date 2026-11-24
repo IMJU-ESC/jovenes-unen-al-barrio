@@ -109,3 +109,13 @@ header{background:#fffdf9}
 }
 .decision{width:min(92vw,430px);max-height:90dvh;overflow:auto;border:0;border-radius:16px;padding:0;color:var(--ink);box-shadow:0 10px 50px #33263340}
 .decision::backdrop{background:#201923a8}.decision form{border:0;margin:0;padding:22px}.decision h3{margin-top:0}.decision h4{font-size:1.3rem;margin:.6rem 0}.decision .avatar{width:78px;height:78px}
+
+.estado-linea,.fila-estado {display:flex;flex-wrap:wrap;align-items:center;gap:.45rem;margin:.4rem 0}
+.asistencia-chip {display:inline-flex;align-items:center;gap:.4em;border-radius:1rem;padding:.22em .72em;font:700 .85rem/1.5 system-ui;color:#394555;background:#e9edf2;white-space:normal}
+.asistencia-chip[data-tono=pendiente] {color:#704200;background:#fff0c7}
+.asistencia-chip[data-tono=presente] {color:#115638;background:#def5e7}
+.asistencia-chip[data-tono=falta] {color:#83222e;background:#ffe2e4}
+.asistencia-chip[data-tono=justificada] {color:#513884;background:#eee7ff}
+.asistencia-chip[data-tono=abierta],.asistencia-chip[data-tono=proxima] {color:#174e77;background:#dfedfa}
+.asistencia-chip[data-tono=cerrada] {color:white;background:#455363}
+.fila-estado small {font-weight:600;color:#6d4207}

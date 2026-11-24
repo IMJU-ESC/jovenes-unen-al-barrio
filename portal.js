@@ -139,10 +139,44 @@ function dashboard(view,admin,monthly){
   const metrics=(admin?metric(people.filter(p=>p.activo).length,'Jóvenes activos'):'')+metric(sum(records)+' h','Horas acreditadas')+metric(activity+' h','Actividad')+metric(learning+' h','Aprendizaje');
   const absences=records.filter(r=>r.estado==='falta').length+' injustificadas · '+records.filter(r=>r.estado==='justificada').length+' justificadas';
   view.innerHTML=hero+actions+'<div class="overview"><section class="card totals"><h3>Balance del mes</h3><div class="metrics">'+metrics+'</div><p class="absence">Faltas · '+absences+'</p></section><section class="card"><h3>Próximas actividades</h3>'+(upcoming.length?agendaList(upcoming.slice(0,3)):'<p class="empty">Sin actividades pendientes en el mes seleccionado.</p>')+'<button class="text-button" data-open="agenda">Ver calendario completo '+icon('flecha')+'</button></section></div>';
+  if(!admin && monthly.length){
+    const recientes=monthly.filter(a=>a.fecha<=stamp()).slice(-3).reverse();
+    if(recientes.length)view.insertAdjacentHTML('afterbegin','<section class="card"><h3>Mi asistencia reciente</h3>'+agendaList(recientes)+'<button class="text-button" data-open="agenda">Ver todas mis actividades</button></section>');
+  }
   view.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{navigate(b.dataset.open);if(b.dataset.open==='horas'&&admin)openManual()});
 }
+const asistenciaVisual={
+  pendiente:['Pendiente','◷'], presente:['Asistencia','✓'], falta:['Falta injustificada','×'],
+  justificada:['Falta justificada','◆'], no_aplica:['No aplica','—'], cerrada:['Lista cerrada','▣'],
+  abierta:['Lista abierta','○'], proxima:['Programada','◷'], sin_registro:['Sin registro','—']
+};
+function etiqueta(tipo,texto){
+  const [nombre,marca]=asistenciaVisual[tipo]||asistenciaVisual.sin_registro;
+  return '<span class="asistencia-chip" data-tono="'+escape(tipo)+'"><span aria-hidden="true">'+marca+'</span>'+escape(texto||nombre)+'</span>';
+}
+function estadoPersonal(a,p,r){
+  if(r)return r.estado;
+  if(a.listaCerrada||!p||!convocado(p,a))return 'sin_registro';
+  return a.fecha>stamp()?'proxima':'pendiente';
+}
+function pendientesEvento(a){
+  if(a.listaCerrada)return 0;
+  const registrados=new Set(records.filter(r=>r.tipo!=='manual'&&r.id===a.id).map(r=>r.person));
+  return people.filter(p=>convocado(p,a)&&!registrados.has(p.id)).length;
+}
+function estadoLista(a){
+  if(a.listaCerrada)return etiqueta('cerrada');
+  if(a.fecha>stamp())return etiqueta('proxima');
+  const n=pendientesEvento(a);
+  return etiqueta('abierta')+etiqueta(n?'pendiente':'presente',n?n+' pendiente'+(n===1?'':'s'):'Sin pendientes');
+}
+function estadoAgenda(a){
+  if(access.participante==='ADMIN')return estadoLista(a);
+  const r=records.find(r=>r.id===a.id&&r.person===people[0]?.id&&r.tipo!=='manual');
+  return etiqueta(estadoPersonal(a,people[0],r))+(a.listaCerrada?etiqueta('cerrada'):'');
+}
 function agendaList(list){
-  return list.length?list.map(a=>'<article class="event"><time datetime="'+escape(a.fecha)+'"><b>'+escape(a.fecha.slice(8))+'</b>'+escape(new Date(a.fecha+'T12:00:00').toLocaleString('es-MX',{month:'short'}))+'</time><div><strong>'+escape(a.titulo)+'</strong><p>'+escape([a.hora,a.lugar,a.categoria,a.horas+' h'].filter(Boolean).join(' · '))+'</p>'+(a.descripcion?'<p>'+escape(a.descripcion)+'</p>':'')+'</div></article>').join(''):'<p class="empty">Sin actividades programadas en este mes.</p>';
+  return list.length?list.map(a=>'<article class="event"><time datetime="'+escape(a.fecha)+'"><b>'+escape(a.fecha.slice(8))+'</b>'+escape(new Date(a.fecha+'T12:00:00').toLocaleString('es-MX',{month:'short'}))+'</time><div><strong>'+escape(a.titulo)+'</strong><div class="estado-linea">'+estadoAgenda(a)+'</div><p>'+escape([a.hora,a.lugar,a.categoria,a.horas+' h'].filter(Boolean).join(' · '))+'</p>'+(a.descripcion?'<p>'+escape(a.descripcion)+'</p>':'')+'</div></article>').join(''):'<p class="empty">Sin actividades programadas en este mes.</p>';
 }
 function badge(view,p,showFields=true){
   view.innerHTML='<section class="gafete-panel"><div class="gafete-preview" aria-live="polite">Preparando la credencial…</div><div class="gafete-actions"><h3>Credencial individual</h3><p>Gafete de 8.5 × 11.5 cm con vigencia de octubre de 2026 a octubre de 2027. Coloca el sello sobre el borde de la foto, dejando visible el rostro. Imprime el PDF en hoja carta al 100 % y recorta por las marcas.</p><button class="pdf" disabled>Descargar PDF para imprimir</button><button class="png light" disabled>Guardar imagen para celular</button><a class="action-link" hidden download="QR-IMJU.gif">Descargar solo el QR</a></div></section>'+(showFields?'<section class="card"><h3>Mi expediente</h3>'+personFields(p)+'</section>':'');
@@ -198,8 +232,8 @@ async function actividadesDelPerfil(root,p,reload){
   for(const a of [...activities].reverse()){
     const previo=porEvento.get(a.id),row=document.createElement('article');row.className='event';
     const editable=Boolean(previo)||p.activo;
-    const estado=previo?labelState(previo.estado):!p.activo?'Participante inactivo':a.listaCerrada?'Lista cerrada · Sin registro':'Sin registrar';
-    row.innerHTML='<div><strong>'+escape(a.titulo)+'</strong><p>'+escape(fullDate(a.fecha)+' de '+a.fecha.slice(0,4))+' · '+escape(estado)+'</p>'+(editable?'<button type="button" class="light">'+(previo?'Corregir registro':'Registrar asistencia')+'</button>':'')+'</div>';
+    const estado=etiqueta(estadoPersonal(a,p,previo))+(a.listaCerrada?etiqueta('cerrada'):'');
+    row.innerHTML='<div><strong>'+escape(a.titulo)+'</strong><p>'+escape(fullDate(a.fecha)+' de '+a.fecha.slice(0,4))+'</p><div class="estado-linea">'+estado+'</div>'+(editable?'<button type="button" class="light">'+(previo?'Corregir registro':'Registrar asistencia')+'</button>':'')+'</div>';
     root.append(row);
     if(!editable)continue;
     row.querySelector('button').onclick=e=>action(async()=>{
@@ -307,7 +341,7 @@ function calendar(view,monthly,admin,reload){
 function attendanceView(view,monthly,reload,scanner){
   const options=monthly.filter(a=>a.fecha<=stamp());
   if(!options.some(a=>a.id===selectedEvent))selectedEvent=options.find(a=>a.fecha===stamp())?.id||(options.length===1?options[0].id:'');
-  view.innerHTML='<section class="card"><label>Actividad<select id="pickEvent"><option value="">Elige la actividad</option>'+opts(options,a=>fullDate(a.fecha)+' · '+a.titulo)+'</select></label><div id="sessionTools"></div></section>';
+  view.innerHTML='<section class="card"><label>Actividad<select id="pickEvent"><option value="">Elige la actividad</option>'+opts(options,a=>fullDate(a.fecha)+' · '+a.titulo+' · '+(a.listaCerrada?'Cerrada':'Abierta · Pendientes: '+pendientesEvento(a)))+'</select></label><div id="sessionTools"></div></section>';
   if(!scanner){
     view.insertAdjacentHTML('afterbegin','<button type="button" id="chooseIndividual">Pasar lista individual</button>');
     el('chooseIndividual').onclick=()=>navigate('padron');
@@ -321,6 +355,7 @@ function attendanceView(view,monthly,reload,scanner){
   changeMode.className='light';changeMode.type='button';
   changeMode.textContent=scanner?'Pasar lista para esta actividad':'Escanear QR para esta actividad';
   changeMode.onclick=()=>navigate(scanner?'lista':'qr');
+  root.querySelector('.session-target').insertAdjacentHTML('beforeend','<div class="estado-linea" id="estadoLista" aria-live="polite">'+estadoLista(a)+'</div>');
   root.querySelector('.session-target').append(changeMode);
   if(!a.listaCerrada){
     const close=document.createElement('button');close.className='light';close.textContent='Cerrar lista';
@@ -331,6 +366,7 @@ function attendanceView(view,monthly,reload,scanner){
     root.querySelector('.session-target').append(close);
     if(a.cierreAutomatico||a.fecha>='2026-11-19')root.querySelector('.session-target').insertAdjacentHTML('beforeend','<p>Los pendientes pasan a falta al cerrar la lista o cuando coordinación vuelva a cargar el panel después del día del evento.</p>');
   }else root.querySelector('.session-target').insertAdjacentHTML('beforeend','<p>Lista cerrada · Puedes corregir los registros desde el perfil.</p>');
+  if(scanner&&a.listaCerrada)return;
   if(scanner){scannerTools(root,a,reload);pendingAttendance(root,a,reload)}else roster(root,a,reload);
 }
 // Las decisiones se resuelven al pulsar un botón, cancelar o abandonar la vista.
@@ -379,6 +415,8 @@ function ajustarJustificante(row,state){
   row.querySelector('.nota-label').textContent=state==='justificada'?'Razón de la falta':'Observaciones';
 }
 function pendingAttendance(root,a,reload){
+  el('estadoLista').innerHTML=estadoLista(a);
+  el('pickEvent').selectedOptions[0].textContent=fullDate(a.fecha)+' · '+a.titulo+' · '+(a.listaCerrada?'Cerrada':'Abierta · Pendientes: '+pendientesEvento(a));
   const saved=new Set(records.filter(r=>r.id===a.id).map(r=>r.person));
   const pending=people.filter(p=>!a.listaCerrada&&convocado(p,a)&&!saved.has(p.id));
   const section=document.createElement('section');
@@ -387,7 +425,7 @@ function pendingAttendance(root,a,reload){
   if(!pending.length)section.insertAdjacentHTML('beforeend','<p>Todos los participantes activos tienen registro para este evento.</p>');
   for(const p of pending){
     const row=document.createElement('div');row.className='event';
-    row.innerHTML='<div><strong>'+escape(p.nombre)+'</strong><p>'+escape(p.usuario)+'</p><div class="quick"><button type="button" data-state="falta">Marcar falta</button><button type="button" class="light" data-state="justificada">Justificar falta</button><button type="button" class="light" data-state="no_aplica">No aplica</button></div></div>';
+    row.innerHTML='<div><strong>'+escape(p.nombre)+'</strong><p>'+escape(p.usuario)+'</p>'+etiqueta('pendiente')+'<div class="quick"><button type="button" data-state="falta">Marcar falta</button><button type="button" class="light" data-state="justificada">Justificar falta</button><button type="button" class="light" data-state="no_aplica">No aplica</button></div></div>';
     row.querySelectorAll('button').forEach(button=>button.onclick=()=>action(async()=>{
       const state=button.dataset.state;
       const warning=state==='falta'&&p.faltasPorMes?.[a.fecha.slice(0,7)]===2?' Esta tercera falta del mes causa baja automática.':'';
@@ -490,15 +528,19 @@ function scannerTools(root,a,reload){
 function roster(root,a,reload){
   const prior=new Map(records.filter(r=>r.id===a.id).map(r=>[r.person,r]));
   const active=people.filter(p=>p.activo||prior.has(p.id));
-  root.insertAdjacentHTML('beforeend','<label>Buscar joven<input type="search" id="rosterSearch" placeholder="Nombre, apellido o usuario" autocomplete="off" enterkeyhint="search"></label><p id="rosterCount" role="status"></p><form id="bulk"><div class="quick"><button type="button" class="light" id="allPresent">Marcar pendientes como presentes</button></div><div id="group"></div><button>Guardar lista</button></form>');
+  root.insertAdjacentHTML('beforeend','<label>Buscar joven<input type="search" id="rosterSearch" placeholder="Nombre, apellido o usuario" autocomplete="off" enterkeyhint="search"></label><label>Mostrar<select id="rosterFilter"><option value="">Todos los estados</option>'+Object.entries(asistenciaVisual).filter(([k])=>['pendiente','presente','falta','justificada','no_aplica','sin_registro'].includes(k)).map(([k,[v]])=>'<option value="'+k+'">'+v+'</option>').join('')+'</select></label><p id="rosterCount" role="status"></p><form id="bulk"><div class="quick"><button type="button" class="light" id="allPresent">Marcar pendientes como presentes</button></div><div id="group"></div><button>Guardar lista</button></form>');
   const normalize=value=>String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   for(const p of active){
     const r=prior.get(p.id), row=document.createElement('div');row.className='list-row';row.dataset.id=p.id;
+    row.dataset.estado=estadoPersonal(a,p,r);
     row.dataset.search=normalize([p.nombre,p.usuario].join(' '));
-    row.innerHTML='<strong>'+escape(p.nombre)+'</strong><label>Asistencia<select name="state"><option value="">Sin registrar</option>'+states+'</select></label><label>Horas<input type="number" name="hours" min="0" max="24" step="1"></label><label><span class="nota-label">Observaciones</span><input name="note" maxlength="240"></label>'+adjunto;
+    row.innerHTML='<strong>'+escape(p.nombre)+'</strong><div class="fila-estado">'+etiqueta(row.dataset.estado)+'</div><label>Asistencia<select name="state"><option value="">Sin registrar</option>'+states+'</select></label><label>Horas<input type="number" name="hours" min="0" max="24" step="1"></label><label><span class="nota-label">Observaciones</span><input name="note" maxlength="240"></label>'+adjunto;
     const state=row.querySelector('select'),hours=row.querySelector('[name=hours]');state.value=r?.estado||'';hours.value=r?.horas??a.horas;hours.disabled=state.value!=='presente';row.querySelector('[name=note]').value=r?.nota||'';
     ajustarJustificante(row,state.value);
-    state.onchange=()=>{ajustarJustificante(row,state.value);hours.disabled=state.value!=='presente';hours.value=hours.disabled?0:(r?.estado==='presente'?r.horas:a.horas)};
+    state.onchange=()=>{
+      const estado=state.value||estadoPersonal(a,p,null);
+      row.querySelector('.fila-estado').innerHTML=etiqueta(estado)+(state.value!==(r?.estado||'')?' <small>Sin guardar</small>':'');
+      ajustarJustificante(row,state.value);hours.disabled=state.value!=='presente';hours.value=hours.disabled?0:(r?.estado==='presente'?r.horas:a.horas)};
     el('group').append(row);
   }
   const search=el('rosterSearch'),group=el('group'),bulkButton=el('allPresent');
@@ -506,7 +548,8 @@ function roster(root,a,reload){
     const words=normalize(search.value).trim().split(/\s+/).filter(Boolean);
     let shown=0;
     for(const row of group.children){
-      const matches=words.every(word=>row.dataset.search.includes(word));
+      const filtro=el('rosterFilter').value;
+      const matches=(!filtro||row.dataset.estado===filtro)&&words.every(word=>row.dataset.search.includes(word));
       row.hidden=!matches;
       row.style.display=matches?'':'none';
       if(matches)shown++;
@@ -515,6 +558,7 @@ function roster(root,a,reload){
     bulkButton.disabled=!shown;
     bulkButton.textContent=words.length?'Marcar pendientes visibles como presentes':'Marcar pendientes como presentes';
   }
+  el('rosterFilter').onchange=filterRoster;
   search.oninput=filterRoster;
   filterRoster();
   el('allPresent').onclick=()=>{for(const select of group.querySelectorAll('.list-row:not([hidden]) select'))if(!select.value){select.value='presente';select.onchange();dirty=true}};
@@ -547,7 +591,7 @@ function hours(view,admin,reload){
   if(!records.length)history.textContent='Este mes todavía no tiene registros.';
   for(const r of records){
     const item=document.createElement('article');item.className='history-item';
-    item.innerHTML='<div><strong>'+escape(r.titulo)+'</strong><p>'+escape([admin?people.find(p=>p.id===r.person)?.nombre:'',fullDate(r.fecha),r.categoria,r.tipo==='manual'?'Asignación directa':'',labelState(r.estado)].filter(Boolean).join(' · '))+'</p>'+(r.nota?'<small>'+escape(r.nota)+'</small>':'')+'</div><b>'+escape(r.horas)+' h</b>';
+    item.innerHTML='<div><strong>'+escape(r.titulo)+'</strong><p>'+escape([admin?people.find(p=>p.id===r.person)?.nombre:'',fullDate(r.fecha),r.categoria,r.tipo==='manual'?'Asignación directa':''].filter(Boolean).join(' · '))+'</p>'+etiqueta(r.estado)+(r.nota?'<small>'+escape(r.nota)+'</small>':'')+'</div><b>'+escape(r.horas)+' h</b>';
     if(r.estado==='justificada'&&r.evidencia){
       const panel=document.createElement('details'),summary=document.createElement('summary'),image=document.createElement('img');
       summary.textContent='Ver foto de evidencia';image.alt='Evidencia de la falta justificada';image.loading='lazy';image.style.maxWidth='100%';image.src=r.evidencia;
