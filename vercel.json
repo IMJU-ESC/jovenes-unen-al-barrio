@@ -1,0 +1,17 @@
+{
+  "framework": null,
+  "installCommand": "",
+  "buildCommand": "mkdir -p public && cp ./*.html ./*.js ./*.css ./*.webp ./*.svg ./firebase-web.json ./portal.webmanifest ./firebase-sdk-LICENSE.txt ./jsQR-LICENSE public/",
+  "outputDirectory": "public",
+  "headers": [
+    {
+      "source": "/acceso-movil.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-cache"
+        }
+      ]
+    }
+  ]
+}
