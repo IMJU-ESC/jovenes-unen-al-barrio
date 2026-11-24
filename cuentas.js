@@ -1,6 +1,7 @@
+import {espacio,dependencia,dominioUsuario} from './dependencias.js';
 import {collection,createUserWithEmailAndPassword,doc,getDocs,query,runTransaction,sendEmailVerification,sendPasswordResetEmail,verifyBeforeUpdateEmail,where} from './firebase-sdk-11.10.0.js';
 
-const alias='@acceso.imju.invalid';
+const alias=dominioUsuario;
 const idPattern=/^[a-zA-Z0-9]{20,64}$/;
 function realEmail(value){
   const email=value.trim().toLowerCase();
@@ -10,7 +11,7 @@ function realEmail(value){
 export function accountForms(auth,form,notice){
   auth.languageCode='es';
   function openSection(){
-    const coord=location.hash==='#coordinacion';
+    const coord=!dependencia&&location.hash==='#coordinacion';
     document.getElementById('coordHelp').hidden=!coord;
     document.getElementById('register').hidden=coord;
     document.getElementById('recovery').hidden=coord;
@@ -71,6 +72,7 @@ export function awaitActivation({user,db,content,notice,action,refresh}){
   document.getElementById('identity').textContent=user.email;
   document.getElementById('ownUid').value=user.uid;
   document.getElementById('check').onclick=e=>action(refresh,e.target);
+  if(dependencia){content.querySelector('details').remove();return}
   if(!idPattern.test(user.uid)){document.getElementById('activate').disabled=true;return}
   const current=document.getElementById('currentRules'), result=document.getElementById('resultRules'), prepared=document.getElementById('prepared');
   current.oninput=()=>{prepared.hidden=true;result.value=''};
@@ -83,7 +85,7 @@ export function awaitActivation({user,db,content,notice,action,refresh}){
     catch{result.select();notice('Usa Copiar sobre el texto seleccionado.')}
   },e.target);
   document.getElementById('activate').onclick=e=>action(async()=>{
-    const ref=doc(db,'accesos',user.uid);
+    const ref=doc(espacio(db),'accesos',user.uid);
     try{await runTransaction(db,async tx=>{
       const account=await tx.get(ref);
       if(account.exists())throw Error('Esta cuenta ya tiene un acceso. Pulsa Revisar mi acceso.');
@@ -107,8 +109,8 @@ export function bindProfile(db,root,people,form,notice){
   select.add(new Option('Selecciona un expediente',''));
   for(const p of people.filter(p=>p.activo))select.add(new Option(p.nombre+' · '+p.usuario,p.id));
   form('bindProfile',async({person,uid})=>{
-    const ref=doc(db,'accesos',uid), personRef=doc(db,'participantes',person);
-    const matches=await getDocs(query(collection(db,'accesos'),where('participante','==',person)));
+    const ref=doc(espacio(db),'accesos',uid), personRef=doc(espacio(db),'participantes',person);
+    const matches=await getDocs(query(collection(espacio(db),'accesos'),where('participante','==',person)));
     const previous=matches.docs.filter(s=>s.data().activo);
     if(previous.length!==1)throw Error('El expediente debe tener exactamente un acceso activo. Revisa el padrón.');
     await runTransaction(db,async tx=>{

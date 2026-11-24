@@ -1,15 +1,23 @@
+import {prefijoQR} from './dependencias.js';
+import {espacio,dependencia,nombreDependencia,dominioUsuario,enlace} from './dependencias.js';
 import {acumularHoras,mostrarAvance} from './avance-horas.js';
 import {browserLocalPersistence,browserSessionPersistence,collection,doc,getDoc,getDocs,getDocsFromServer,indexedDBLocalPersistence,initializeApp,initializeAuth,initializeFirestore,onAuthStateChanged,query,runTransaction,setDoc,signInWithEmailAndPassword,signOut,updateDoc,updatePassword,where} from './firebase-sdk-11.10.0.js';
 import {icon,navigation} from './navegacion.js';
-import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js';
-import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=faltas4';
-import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=red1';
-import {manageRoster,cambiarEstado} from './padron.js?v=faltas4';
+import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js?v=sedes1';
+import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=sedes1';
+import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=sedes1';
+import {manageRoster,cambiarEstado} from './padron.js?v=sedes1';
 
 const app=initializeApp(await (await fetch('./firebase-web.json')).json());
 const auth=initializeAuth(app,{persistence:[indexedDBLocalPersistence,browserLocalPersistence,browserSessionPersistence]});
 const redMovil=new URLSearchParams(location.search).get('red')==='movil';
 const db=initializeFirestore(app,redMovil?{experimentalForceLongPolling:true,experimentalLongPollingOptions:{timeoutSeconds:10}}:{});
+if(dependencia){
+  document.querySelector('#login .intro p').textContent=nombreDependencia;
+  document.querySelector('#register summary').textContent='Crear acceso con correo';
+  document.title=nombreDependencia+' · Jóvenes Unen al Barrio';
+  document.querySelector('#modoMovil a').href=enlace('./?red=movil');
+}
 const el=id=>document.getElementById(id);
 const escape=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const stamp=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Mazatlan'}).format(new Date());
@@ -28,18 +36,18 @@ function opts(xs,label){return xs.map(x=>'<option value="'+escape(x.id)+'">'+esc
 function snapshot(s){return s.docs.map(d=>({...d.data(),id:d.id}))}
 function sum(rs){return rs.reduce((n,r)=>n+(r.estado==='presente'?Number(r.horas):0),0)}
 accountForms(auth,form,notice);
-form('loginForm',async d=>{await signInWithEmailAndPassword(auth,d.user.trim().toLowerCase()+(d.user.includes('@')?'':'@acceso.imju.invalid'),d.pass);el('loginForm').reset()});
+form('loginForm',async d=>{await signInWithEmailAndPassword(auth,d.user.trim().toLowerCase()+(d.user.includes('@')?'':dominioUsuario),d.pass);el('loginForm').reset()});
 el('logout').onclick=()=>{if(guard())action(()=>signOut(auth))};
 
 onAuthStateChanged(auth,user=>{revision++;page='inicio';profileId='';directoryQuery='';dirty=false;lastScan='';selectedEvent='';stopCamera();content.replaceChildren();people=[];activities=[];records=[];access=null;notice('');el('login').hidden=!!user;el('account').hidden=!user;if(user){content.innerHTML='<p role="status" class="card">Cargando tu panel…</p>'+(redMovil?'':'<a href="?red=movil">¿Tarda en abrir? Probar conexión móvil</a>');action(async()=>{try{await load(user)}catch(err){if(auth.currentUser?.uid===user.uid){content.innerHTML='<button id="retry">Volver a cargar mi panel</button>'+(redMovil?'':'<a href="?red=movil">Probar conexión móvil</a>');el('retry').onclick=()=>action(()=>load(user))}throw err}})}});
 async function load(user){
- const seq=++revision;stopCamera();const s=await getDoc(doc(db,'accesos',user.uid));if(seq!==revision)return;
+ const seq=++revision;stopCamera();const s=await getDoc(doc(espacio(db),'accesos',user.uid));if(seq!==revision)return;
  if(!s.exists()){awaitActivation({user,db,content,notice,action,refresh:()=>load(user)});return}
  if(!s.data().activo)throw Error('Solicita a coordinación la activación de tu cuenta.');
  access=s.data();
  if(!access.listo){content.innerHTML='<form id="rotate"><h2>Elige tu contraseña personal</h2>'+field('Nueva contraseña (mínimo 10 caracteres)','a','password','minlength="10" autocomplete="new-password"')+field('Repite la contraseña','b','password','autocomplete="new-password"')+'<button>Guardar y entrar</button></form>';form('rotate',async d=>{if(d.a!==d.b)throw Error('Las contraseñas deben coincidir.');await updatePassword(user,d.a);await updateDoc(s.ref,{listo:true});await load(user)});return}
  const admin=access.participante==='ADMIN';
- const [list,agenda]=await Promise.all([admin?getDocs(collection(db,'participantes')).then(snapshot):getDoc(doc(db,'participantes',access.participante)).then(d=>d.exists()?[{...d.data(),id:d.id}]:[]),getDocs(collection(db,'actividades')).then(snapshot)]);
+ const [list,agenda]=await Promise.all([admin?getDocs(collection(espacio(db),'participantes')).then(snapshot):getDoc(doc(espacio(db),'participantes',access.participante)).then(d=>d.exists()?[{...d.data(),id:d.id}]:[]),getDocs(collection(espacio(db),'actividades')).then(snapshot)]);
  if(seq!==revision)return;
  if(admin){
    const vencidas=agenda.filter(a=>!a.listaCerrada&&a.fecha<stamp()&&(a.cierreAutomatico||a.fecha>='2026-11-19')).sort((a,b)=>a.fecha.localeCompare(b.fecha));
@@ -47,10 +55,10 @@ async function load(user){
      if(seq!==revision)return;
      await cerrarLista(a,list);a.listaCerrada=true;
    }
-   if(vencidas.length)list.splice(0,list.length,...snapshot(await getDocsFromServer(collection(db,'participantes'))));
+   if(vencidas.length)list.splice(0,list.length,...snapshot(await getDocsFromServer(collection(espacio(db),'participantes'))));
  }
  const visibles=admin?list.filter(p=>!p.muestra):list;
- const rows=(await Promise.all(visibles.map(async p=>snapshot(await getDocs(query(collection(db,'participantes',p.id,'registros'),where('fecha','>=',selectedMonth+'-01'),where('fecha','<=',selectedMonth+'-31')))).map(r=>({...r,person:p.id}))))).flat();
+ const rows=(await Promise.all(visibles.map(async p=>snapshot(await getDocs(query(collection(espacio(db),'participantes',p.id,'registros'),where('fecha','>=',selectedMonth+'-01'),where('fecha','<=',selectedMonth+'-31')))).map(r=>({...r,person:p.id}))))).flat();
  if(seq!==revision)return;
  const prepared=await Promise.all(visibles.map(p=>prepararAsistencia(db,p,admin)));
  if(seq!==revision)return;
@@ -89,7 +97,7 @@ function draw(admin){
   if(!(page in pages))page='inicio';
   const monthly=activities.filter(a=>a.fecha?.startsWith(selectedMonth));
   const monthControl=['cuenta','gafete'].includes(page)?'':'<label class="month">Mes de consulta<input id="month" type="month" value="'+escape(selectedMonth)+'"></label>';
-  content.innerHTML='<div class="desk">'+navigation(pages,page,admin)+'<section class="workspace"><div class="view-head"><div><p class="kicker">'+(admin?'Coordinación · IMJU':'Mi participación · IMJU')+'</p><h2 id="viewTitle" tabindex="-1">'+pages[page]+'</h2></div>'+monthControl+'</div><div id="view"></div></section></div>';
+  content.innerHTML='<div class="desk">'+navigation(pages,page,admin)+'<section class="workspace"><div class="view-head"><div><p class="kicker">'+(admin?'Coordinación · '+escape(nombreDependencia)+'':'Mi participación · '+escape(nombreDependencia)+'')+'</p><h2 id="viewTitle" tabindex="-1">'+pages[page]+'</h2></div>'+monthControl+'</div><div id="view"></div></section></div>';
   content.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
   if(el('month'))el('month').onchange=e=>{
     const value=e.target.value;
@@ -107,11 +115,11 @@ function draw(admin){
   if(page==='cuenta'){
     view.innerHTML='<section class="card"><h3>Cuenta actual</h3><p>'+escape(auth.currentUser.email)+'</p></section>';
     linkEmail(auth.currentUser,view,form,notice);
-    if(admin){view.insertAdjacentHTML('beforeend','<a class="action-link" href="./entrega.html">Preparar mensajes de acceso</a><section class="card"><h3>Respaldo del programa</h3><p>Descarga el padrón, las fotos disponibles, las actividades y el historial de todos los meses en un archivo privado.</p><button id="backup">Descargar respaldo JSON</button></section>');
+    if(admin){view.insertAdjacentHTML('beforeend','<a class="action-link" href="'+escape(enlace('./entrega.html'))+'">Preparar mensajes de acceso</a><section class="card"><h3>Respaldo del programa</h3><p>Descarga el padrón, las fotos disponibles, las actividades y el historial de todos los meses en un archivo privado.</p><button id="backup">Descargar respaldo JSON</button></section>');
     el('backup').onclick=e=>action(async()=>{
       const getAll=async ref=>(await getDocsFromServer(ref)).docs.map(d=>({...d.data(),id:d.id}));
-      const [participants,events]=await Promise.all([getAll(collection(db,'participantes')),getAll(collection(db,'actividades'))]);
-      const profiles=await Promise.all(participants.map(async p=>({...p,registros:await getAll(collection(db,'participantes',p.id,'registros'))})));
+      const [participants,events]=await Promise.all([getAll(collection(espacio(db),'participantes')),getAll(collection(espacio(db),'actividades'))]);
+      const profiles=await Promise.all(participants.map(async p=>({...p,registros:await getAll(collection(espacio(db),'participantes',p.id,'registros'))})));
       const file=new Blob([JSON.stringify({version:1,fecha:new Date().toISOString(),participantes:profiles,actividades:events})],{type:'application/json'});
       const url=URL.createObjectURL(file),a=document.createElement('a');a.href=url;a.download='IMJU-respaldo-'+stamp()+'.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),5000);
     },e.currentTarget);bindProfile(db,view,people,form,notice)}
@@ -207,7 +215,7 @@ async function cerrarLista(a,list){
     const changes=candidatos.slice(i,i+8).map(p=>({person:p.id,id:a.id,prior:null,next:attendanceRow(a,'falta',0,'Sin registro al cierre de la actividad.')}));
     await saveRows(db,changes,a,'cierre');
   }
-  const ref=doc(db,'actividades',a.id);
+  const ref=doc(espacio(db),'actividades',a.id);
   await runTransaction(db,async tx=>{
     const current=(await tx.get(ref)).data();
     if(!current||current.fecha!==a.fecha)throw Error('La actividad cambió. Actualiza el panel.');
@@ -218,7 +226,7 @@ async function actividadesDelPerfil(root,p,reload){
   root.innerHTML='<h3 tabindex="-1">Pasar lista individual</h3><p role="status">Cargando actividades…</p>';
   let historial;
   try{
-    historial=snapshot(await getDocsFromServer(collection(db,'participantes',p.id,'registros')));
+    historial=snapshot(await getDocsFromServer(collection(espacio(db),'participantes',p.id,'registros')));
   }catch(error){
     if(!root.isConnected)return;
     root.querySelector('p').textContent='No se pudo cargar el historial de este joven.';
@@ -266,7 +274,7 @@ function avisoFaltas(p,mes){
 const avancesDirectorio=new WeakMap();
 function horasDelPrograma(persona){
   if(!avancesDirectorio.has(persona)){
-    const ref=collection(db,'participantes',persona.id,'registros');
+    const ref=collection(espacio(db),'participantes',persona.id,'registros');
     const lectura=getDocsFromServer(query(ref,where('estado','==','presente')))
       .then(resultado=>acumularHoras(resultado.docs.map(d=>d.data())))
       .catch(error=>{avancesDirectorio.delete(persona);throw error});
@@ -361,7 +369,7 @@ function calendar(view,monthly,admin,reload){
   if(admin){
     view.innerHTML='<details><summary>Crear actividad</summary><form id="newact">'+activityInputs()+'<button>Publicar actividad</button></form></details>';
     el('newact').elements.date.value=stamp();
-    form('newact',async d=>{await setDoc(doc(collection(db,'actividades')),{...activityData(d),cierreAutomatico:true});selectedMonth=d.date.slice(0,7);await reload('Actividad publicada.')});
+    form('newact',async d=>{await setDoc(doc(collection(espacio(db),'actividades')),{...activityData(d),cierreAutomatico:true});selectedMonth=d.date.slice(0,7);await reload('Actividad publicada.')});
   }
   for(const a of monthly){
     const item=document.createElement('section');item.className='card';item.innerHTML=agendaList([a]);view.append(item);
@@ -375,7 +383,7 @@ function calendar(view,monthly,admin,reload){
       const photo=file?(await imageCanvas(file,768)).toDataURL('image/jpeg',0.65):null;
       // Las participaciones guardadas conservan la fecha, categoría y horas acreditadas.
       await runTransaction(db,async tx=>{
-        const ref=doc(db,'actividades',a.id),current=(await tx.get(ref)).data();
+        const ref=doc(espacio(db),'actividades',a.id),current=(await tx.get(ref)).data();
         if(!current)throw Error('La actividad ya no existe.');
         const updates={};
         for(const [k,v] of Object.entries(data))if(v!==(a[k]??'')){if(current[k]!==a[k])throw Error('Otro coordinador modificó la actividad. Actualiza el panel.');updates[k]=v}
@@ -495,7 +503,7 @@ function pendingAttendance(root,a,reload){
       lastScan=p.nombre+' · '+labelState(state);
       el('scanResult').textContent=lastScan;
       pendingAttendance(root,a,reload);
-      const fresh=await getDoc(doc(db,'participantes',p.id));
+      const fresh=await getDoc(doc(espacio(db),'participantes',p.id));
       if(root.isConnected&&fresh.exists())Object.assign(p,fresh.data());
     },button));
     section.append(row);
@@ -514,7 +522,7 @@ function scannerTools(root,a,reload){
   function idle(){stopCamera();video.srcObject=null;video.hidden=true;stop.hidden=true;start.disabled=false;file.disabled=false}
   async function register(code){
     try{
-      const person=code.startsWith('IMJU-JB:1:')&&people.find(p=>p.id===code.slice(10)&&p.activo);
+      const person=code.startsWith(prefijoQR)&&people.find(p=>p.id===code.slice(prefijoQR.length)&&p.activo);
       if(!person)throw Error('El QR no corresponde a un participante activo.');
       
       const version=cameraVersion;

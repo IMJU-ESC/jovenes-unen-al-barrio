@@ -1,8 +1,8 @@
 // Sólo recursos públicos del programa. Los datos de Firebase se consultan directamente.
 const scope=new URL(self.registration.scope);
 const prefix='imju-acceso-'+scope.pathname+'-';
-const cacheName=prefix+'movil25';
-const paths=['index.html','portal.css?v=horas90','portal.js?v=horas90','firebase-sdk-11.10.0.js','firebase-web.json','credencial.js','avance-horas.js','cuentas.js?v=red1','movimientos.js?v=faltas4','padron.js?v=faltas4','navegacion.js','qrcode.js','jsQR.js'];
+const cacheName=prefix+'sedes1';
+const paths=['index.html','portal.css?v=horas90','portal.js?v=sedes1','firebase-sdk-11.10.0.js','firebase-web.json','credencial.js?v=sedes1','avance-horas.js','dependencias.js','cuentas.js?v=sedes1','movimientos.js?v=sedes1','padron.js?v=sedes1','navegacion.js','qrcode.js','jsQR.js'];
 const allowed=new Set(paths.map(path=>new URL(path,scope).pathname));
 const index=new URL('index.html',scope).href;
 self.addEventListener('install',event=>{

@@ -1,6 +1,7 @@
-import {limiteFaltas} from './movimientos.js?v=faltas4';
+import {espacio,dominioUsuario} from './dependencias.js';
+import {limiteFaltas} from './movimientos.js?v=sedes1';
 import {collection,createUserWithEmailAndPassword,deleteApp,doc,getDocsFromServer,inMemoryPersistence,initializeApp,initializeAuth,query,runTransaction,signInWithEmailAndPassword,updateDoc,where} from './firebase-sdk-11.10.0.js';
-import {imageCanvas} from './credencial.js';
+import {imageCanvas} from './credencial.js?v=sedes1';
 
 const fields = [
   ['nombre','Nombre completo'], ['comunidad','Comunidad'], ['generacion','Generación'],
@@ -43,8 +44,8 @@ function submit(form,label,handler,onError) {
   };
 }
 export async function cambiarEstado(db,p,enabled,changes={},mes=''){
-  const profileRef=doc(db,'participantes',p.id);
-  const accounts=await getDocsFromServer(query(collection(db,'accesos'),where('participante','==',p.id)));
+  const profileRef=doc(espacio(db),'participantes',p.id);
+  const accounts=await getDocsFromServer(query(collection(espacio(db),'accesos'),where('participante','==',p.id)));
   await runTransaction(db,async tx=>{
     const profile=await tx.get(profileRef);
     if(!profile.exists())throw Error('El expediente ya no existe.');
@@ -81,7 +82,7 @@ export function manageRoster(root,{app,db,people,reload,onError,editOnly=false,c
       for(const [k,node] of inputs)if(node.value.trim()!==(p[k]||''))changes[k]=node.value.trim();
       if(editPhoto.files[0])changes.foto=await profilePhoto(editPhoto);
       if(changes.nombre==='')throw Error('Escribe el nombre completo.');
-      const profileRef=doc(db,'participantes',p.id);
+      const profileRef=doc(espacio(db),'participantes',p.id);
       if(active.checked!==Boolean(p.activo)){
         const enabled=active.checked;
         if(!enabled&&!window.confirm('¿Desactivar el acceso de '+p.nombre+' y conservar su historial?'))return;
@@ -136,7 +137,7 @@ async function alta(app,db,name,password,data){
     const secondary=initializeApp(app.options,'alta-'+crypto.randomUUID());
     try{
       const aux=initializeAuth(secondary,{persistence:inMemoryPersistence});
-      const email=name+'@acceso.imju.invalid';
+      const email=name+dominioUsuario;
       let credential;
       try{credential=await createUserWithEmailAndPassword(aux,email,password)}
       catch(e){
@@ -146,8 +147,8 @@ async function alta(app,db,name,password,data){
       }
       const uid=credential.user.uid;
       await runTransaction(db,async tx=>{
-        const ref=doc(db,'accesos',uid);
-        const personRef=doc(db,'participantes',uid);
+        const ref=doc(espacio(db),'accesos',uid);
+        const personRef=doc(espacio(db),'participantes',uid);
         const [access,person]=await Promise.all([tx.get(ref),tx.get(personRef)]);
         if(access.exists()||person.exists()){
           if(access.data()?.participante===uid&&person.data()?.usuario===name)return;

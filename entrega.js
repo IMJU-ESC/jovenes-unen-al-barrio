@@ -1,4 +1,6 @@
+import {nombreDependencia,enlace} from './dependencias.js';
 'use strict';
+document.querySelector('a[href="./"]').href=enlace('./');
 const file=document.querySelector('#archivo'), person=document.querySelector('#persona');
 const message=document.querySelector('#mensaje'), result=document.querySelector('#resultado'), copy=document.querySelector('#copiar');
 const download=document.querySelector('#descargar');
@@ -39,8 +41,8 @@ file.onchange=async()=>{
 };
 function messageFor(user){
   return [
-    'Hola, te escribimos del IMJU Escuinapa. Este es tu acceso individual a Jóvenes que Unen al Barrio.',
-    'Entra en https://imju-esc.github.io/jovenes-unen-al-barrio/',
+    'Hola, te escribimos de '+nombreDependencia+'. Este es tu acceso individual a Jóvenes que Unen al Barrio.',
+    'Entra en '+enlace('./'),
     'Usuario: '+user,'Contraseña temporal: '+rows.get(user),'',
     'La primera vez, elige una contraseña personal de al menos 10 caracteres. En Inicio, toca «Mostrar mi gafete» para presentar tu QR. También puedes consultar tus horas y próximas actividades.',
     'Si ya cambiaste tu contraseña, entra con la que elegiste. Si necesitas ayuda, responde a coordinación.'

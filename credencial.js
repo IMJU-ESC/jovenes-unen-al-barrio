@@ -1,3 +1,4 @@
+import {prefijoQR} from './dependencias.js';
 const scripts=new Map();
 export function cargarQR(nombre){
   if(window[nombre])return Promise.resolve();
@@ -137,7 +138,7 @@ export async function saveBadge(canvas,person,format){
 }
 
 export function badgeQR(person){
-  const qr=window.qrcode(0,'M');qr.addData('IMJU-JB:1:'+person.id);qr.make();return qr.createDataURL(10,40);
+  const qr=window.qrcode(0,'M');qr.addData(prefijoQR+person.id);qr.make();return qr.createDataURL(10,40);
 }
 
 export async function saveRosterBadges(people,progress){
