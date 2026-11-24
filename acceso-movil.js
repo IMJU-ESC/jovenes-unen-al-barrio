@@ -1,12 +1,16 @@
 // Sólo recursos públicos del programa. Los datos de Firebase se consultan directamente.
 const scope=new URL(self.registration.scope);
 const prefix='imju-acceso-'+scope.pathname+'-';
-const cacheName=prefix+'horas90';
-const paths=['index.html','portal.css?v=horas90','portal.js?v=horas90','firebase-sdk-11.10.0.js','firebase-web.json','credencial.js','avance-horas.js','cuentas.js?v=red1','movimientos.js?v=faltas4','padron.js?v=faltas4','navegacion.js','patio.webp','insignia.svg','portal.webmanifest','qrcode.js','jsQR.js','sspc.webp','escudo.webp','municipio.webp','imju.webp'];
+const cacheName=prefix+'movil25';
+const paths=['index.html','portal.css?v=horas90','portal.js?v=horas90','firebase-sdk-11.10.0.js','firebase-web.json','credencial.js','avance-horas.js','cuentas.js?v=red1','movimientos.js?v=faltas4','padron.js?v=faltas4','navegacion.js','qrcode.js','jsQR.js'];
 const allowed=new Set(paths.map(path=>new URL(path,scope).pathname));
 const index=new URL('index.html',scope).href;
 self.addEventListener('install',event=>{
-  event.waitUntil(caches.open(cacheName).then(cache=>cache.addAll(paths.map(path=>new Request(new URL(path,scope),{cache:'reload'})))));
+  event.waitUntil((async()=>{
+    const cache=await caches.open(cacheName);
+    await cache.addAll(paths.map(path=>new Request(new URL(path,scope),{cache:'reload'})));
+    await self.skipWaiting();
+  })());
 });
 self.addEventListener('activate',event=>{
   event.waitUntil((async()=>{
