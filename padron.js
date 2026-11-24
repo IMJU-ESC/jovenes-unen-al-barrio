@@ -1,3 +1,4 @@
+import {limiteFaltas} from './movimientos.js?v=faltas4';
 import {collection,createUserWithEmailAndPassword,deleteApp,doc,getDocsFromServer,inMemoryPersistence,initializeApp,initializeAuth,query,runTransaction,signInWithEmailAndPassword,updateDoc,where} from './firebase-sdk-11.10.0.js';
 import {imageCanvas} from './credencial.js';
 
@@ -41,6 +42,21 @@ function submit(form,label,handler,onError) {
     try{await handler()}catch(e){onError(e)}finally{button.disabled=false}
   };
 }
+export async function cambiarEstado(db,p,enabled,changes={},mes=''){
+  const profileRef=doc(db,'participantes',p.id);
+  const accounts=await getDocsFromServer(query(collection(db,'accesos'),where('participante','==',p.id)));
+  await runTransaction(db,async tx=>{
+    const profile=await tx.get(profileRef);
+    if(!profile.exists())throw Error('El expediente ya no existe.');
+    if(mes && (profile.data().faltasPorMes?.[mes]||0)<limiteFaltas)throw Error('El conteo cambió. Actualiza el perfil antes de decidir la baja.');
+    if(profile.data()?.activo!==p.activo)throw Error('El estado cambió. Actualiza el panel.');
+    const linked=await Promise.all(accounts.docs.map(account=>tx.get(account.ref)));
+    const targets=linked.filter(a=>a.data()?.participante===p.id&&(enabled?a.data().suspendidoPorPadron:a.data().activo));
+    if(enabled&&targets.length>1)throw Error('Revisa la vinculación del expediente antes de reactivarlo.');
+    for(const account of targets)tx.update(account.ref,{activo:enabled,suspendidoPorPadron:!enabled});
+    tx.update(profileRef,{...changes,activo:enabled,bajaPorFaltas:false});
+  });
+}
 export function manageRoster(root,{app,db,people,reload,onError,editOnly=false,createOnly=false}) {
   if(!createOnly){
     const edit=section(root,'Actualizar datos de un participante');
@@ -69,17 +85,7 @@ export function manageRoster(root,{app,db,people,reload,onError,editOnly=false,c
       if(active.checked!==Boolean(p.activo)){
         const enabled=active.checked;
         if(!enabled&&!window.confirm('¿Desactivar el acceso de '+p.nombre+' y conservar su historial?'))return;
-        const accounts=await getDocsFromServer(query(collection(db,'accesos'),where('participante','==',p.id)));
-        await runTransaction(db,async tx=>{
-          const profile=await tx.get(profileRef);
-          if(enabled&&profile.data()?.bajaPorFaltas)throw Error('Para reactivar, corrige las faltas en Horas e historial hasta que cada mes tenga menos de tres.');
-          if(profile.data()?.activo!==p.activo)throw Error('El estado cambió. Actualiza el panel.');
-          const linked=await Promise.all(accounts.docs.map(account=>tx.get(account.ref)));
-          const targets=linked.filter(a=>a.data()?.participante===p.id&&(enabled?a.data().suspendidoPorPadron:a.data().activo));
-          if(enabled&&targets.length>1)throw Error('Revisa la vinculación del expediente antes de reactivarlo.');
-          for(const account of targets)tx.update(account.ref,{activo:enabled,suspendidoPorPadron:!enabled});
-          tx.update(profileRef,{...changes,activo:enabled});
-        });
+        await cambiarEstado(db,p,enabled,changes);
       }else if(Object.keys(changes).length)await updateDoc(profileRef,changes);
       await reload('Datos guardados.');
     },onError);

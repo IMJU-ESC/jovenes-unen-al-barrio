@@ -3,7 +3,7 @@ import {collection,doc,getDocsFromServer,increment,query,runTransaction,where} f
 const caps={actividad:80,aprendizaje:10};
 const key=r=>r?JSON.stringify([r.fecha,r.titulo,r.horas,r.estado,r.categoria,r.nota||'',r.evidencia||'',r.tipo]):null;
 
-export const limiteFaltas=3;
+export const limiteFaltas=4;
 async function contarFaltas(person){
   const faltas=await getDocsFromServer(query(collection(person,'registros'),where('estado','==','falta')));
   const meses={};
@@ -16,20 +16,15 @@ function ajustarMes(meses,registro,delta){
   meses[mes]=(meses[mes]||0)+delta;
   if(!meses[mes])delete meses[mes];
 }
-function estadoAsistencia(profile,meses){
-  const baja=Object.values(meses).some(n=>n>=limiteFaltas);
-  const automatic=Boolean(profile.bajaPorFaltas||profile.activo)&&baja;
-  return {faltasPorMes:meses,bajaPorFaltas:automatic,activo:!baja&&Boolean(profile.activo||profile.bajaPorFaltas)};
-}
 export async function prepararAsistencia(db,profile,admin){
   if(profile.faltasPorMes)return profile;
   const ref=doc(db,'participantes',profile.id);
-  if(!admin)return {...profile,...estadoAsistencia(profile,await contarFaltas(ref))};
+  if(!admin)return {...profile,faltasPorMes:await contarFaltas(ref)};
   const data=await runTransaction(db,async tx=>{
     const current=(await tx.get(ref)).data();
     if(!current)throw Error('El expediente cambió. Actualiza el panel.');
     if(current.faltasPorMes)return current;
-    const estado=estadoAsistencia(current,await contarFaltas(ref));
+    const estado={faltasPorMes:await contarFaltas(ref)};
     tx.update(ref,estado);return {...current,...estado};
   });
   return {...data,id:profile.id};
@@ -66,7 +61,7 @@ export async function saveRows(db,changes,activity=null,scan=false){
       const data=profile.data();
       const meses={...(data.faltasPorMes||await contarFaltas(person))};
       ajustarMes(meses,old,-1);ajustarMes(meses,c.next,1);
-      return {person,record,next:c.next,estado:estadoAsistencia(data,meses)};
+      return {person,record,next:c.next,estado:{faltasPorMes:meses}};
     }));
     for(const p of plans){
       if(p.existing||p.omitido)continue;

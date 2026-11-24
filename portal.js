@@ -1,9 +1,9 @@
 import {browserLocalPersistence,browserSessionPersistence,collection,doc,getDoc,getDocs,getDocsFromServer,indexedDBLocalPersistence,initializeApp,initializeAuth,initializeFirestore,onAuthStateChanged,query,runTransaction,setDoc,signInWithEmailAndPassword,signOut,updateDoc,updatePassword,where} from './firebase-sdk-11.10.0.js';
 import {icon,navigation} from './navegacion.js';
 import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js';
-import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=red1';
+import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=faltas4';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=red1';
-import {manageRoster} from './padron.js?v=red1';
+import {manageRoster,cambiarEstado} from './padron.js?v=faltas4';
 
 const app=initializeApp(await (await fetch('./firebase-web.json')).json());
 const auth=initializeAuth(app,{persistence:[indexedDBLocalPersistence,browserLocalPersistence,browserSessionPersistence]});
@@ -116,13 +116,12 @@ function draw(admin){
     },e.currentTarget);bindProfile(db,view,people,form,notice)}
   }
   if(!admin&&people[0]){
-    const p=people[0],actual=stamp().slice(0,7);
-    const mes=Object.keys(p.faltasPorMes).sort().find(m=>p.faltasPorMes[m]>=limiteFaltas)||actual;
+    const p=people[0],mes=selectedMonth;
     const count=p.faltasPorMes[mes]||0;
     if(count){
       const warning=document.createElement('aside');warning.className='session-target';warning.setAttribute('role','status');
       const periodo=new Date(mes+'-15T12:00:00').toLocaleString('es-MX',{month:'long',year:'numeric'});
-      warning.textContent=(count>=3?'Baja por '+count+' faltas injustificadas en '+periodo+'.':count===2?'Tienes 2 faltas injustificadas en '+periodo+'. Una más este mes causa baja automática.':'Tienes una falta injustificada en '+periodo+'. La tercera del mismo mes causa baja automática.')+' Para aclaraciones, comunícate con coordinación.';
+      warning.textContent=(p.activo?'':'Tu expediente está inactivo. ')+count+' falta'+(count===1?' injustificada':'s injustificadas')+' en '+periodo+'. '+(count>=limiteFaltas?'Coordinación puede revisar tu baja.':count===limiteFaltas-1?'Una falta más este mes permite a coordinación revisar tu baja.':'A partir de cuatro en el mismo mes, coordinación puede revisar tu baja.');
       view.prepend(warning);
     }
   }
@@ -256,10 +255,25 @@ async function actividadesDelPerfil(root,p,reload){
     },e.currentTarget);
   }
 }
+function avisoFaltas(p,mes){
+  const n=p.faltasPorMes?.[mes]||0;
+  const nivel=n>=limiteFaltas?'falta':n===limiteFaltas-1?'pendiente':'sin_registro';
+  const detalle=!p.activo?' · Inactivo':n>=limiteFaltas?' · Revisar baja':n===limiteFaltas-1?' · A una del límite':'';
+  return etiqueta(nivel,n+(n===1?' falta injustificada':' faltas injustificadas')+detalle);
+}
 function directory(view,reload){
   const person=people.find(p=>p.id===profileId);
   if(person){
     view.innerHTML='<button class="light" id="backDirectory">← Volver al directorio</button><section class="profile-head">'+avatar(person)+'<div><h3>'+escape(person.nombre)+'</h3><p>Usuario del padrón · <strong>'+escape(person.usuario)+'</strong></p></div></section><div class="quick profile-controls"><button id="profileEdit">Editar expediente</button><button class="light" id="profileAccess" '+(person.activo?'':'disabled')+'>Recuperar acceso</button><button id="profileHours" '+(person.activo?'':'disabled')+'>Sumar horas</button><button class="light" data-task="qr">Escanear QR</button><button type="button" id="profileAttendance">Pasar lista individual</button></div><section id="perfilAsistencia" class="card"></section><section class="card"><h3>Datos del joven</h3>'+personFields(person)+'<p><strong>'+sum(records.filter(r=>r.person===person.id))+' h</strong> acreditadas en el mes seleccionado</p></section><div id="profileBadge"></div><section id="profileEditor" hidden></section>';
+    const mes=selectedMonth;
+    const periodo=new Date(mes+'-15T12:00:00').toLocaleString('es-MX',{month:'long',year:'numeric'});
+    el('perfilAsistencia').insertAdjacentHTML('beforebegin','<section class="card"><h3>Faltas de '+escape(periodo)+'</h3>'+avisoFaltas(person,mes)+(person.activo&&(person.faltasPorMes?.[mes]||0)>=limiteFaltas?' <button id="bajaMensual">Dar de baja por faltas</button>':'')+'</section>');
+    const baja=el('bajaMensual');
+    if(baja)baja.onclick=()=>action(async()=>{
+      if(!guard()||!confirm('¿Dar de baja a '+person.nombre+' por '+person.faltasPorMes[mes]+' faltas injustificadas en '+periodo+'? Se desactivará su acceso y se conservará su historial.'))return;
+      await cambiarEstado(db,person,false,{},mes);
+      await reload('Baja registrada.');
+    },baja);
     const attendance=el('perfilAsistencia');
     actividadesDelPerfil(attendance,person,reload);
     el('profileAttendance').onclick=()=>{attendance.querySelector('h3').focus();attendance.scrollIntoView({block:'start'})};
@@ -284,7 +298,7 @@ function directory(view,reload){
     el('backDirectory').onclick=()=>{if(!guard())return;dirty=false;profileId='';draw(true);el('findPerson').focus()};
     return;
   }
-  view.innerHTML='<label>Buscar joven<input type="search" id="findPerson" placeholder="Nombre, usuario o comunidad"></label><div id="cards" class="people-grid"></div><div id="rosterTools"></div>';
+  view.innerHTML='<label>Buscar joven<input type="search" id="findPerson" placeholder="Nombre, usuario o comunidad"></label><label>Faltas del mes<select id="riesgoMes"><option value="">Todos los jóvenes</option><option value="3">A una del límite (3)</option><option value="4">Revisar baja (4 o más)</option></select></label><div id="cards" class="people-grid"></div><div id="rosterTools"></div>';
   view.insertAdjacentHTML('afterbegin','<section class="card"><h3>Gafetes del padrón</h3><p>Cuatro por hoja carta, de 8.5 × 11.5 cm. Imprime al 100 %. Los inactivos aparecen identificados.</p><button id="printRoster">Descargar todos los gafetes</button><span role="status" id="printProgress"></span></section>');
   const print=el('printRoster'),progress=el('printProgress');
   print.disabled=!people.length;
@@ -297,13 +311,14 @@ function directory(view,reload){
   const search=el('findPerson');search.value=directoryQuery;
   function filter(){
     directoryQuery=search.value;
-    const matches=people.filter(p=>fold([p.nombre,p.usuario,p.comunidad].join(' ')).includes(fold(directoryQuery)));
-    el('cards').innerHTML=matches.map(p=>'<button type="button" class="directory-person" data-person="'+escape(p.id)+'">'+avatar(p)+'<span><strong>'+escape(p.nombre)+'</strong><small>Usuario · '+escape(p.usuario)+'</small><small>'+escape(p.comunidad||'Comunidad pendiente')+' · '+sum(records.filter(r=>r.person===p.id))+' h</small></span><b aria-hidden="true">›</b></button>').join('')||'<p>No se encontraron participantes.</p>';
+    const nivel=el('riesgoMes').value;
+    const matches=people.filter(p=>!nivel||(p.activo&&(nivel==='3'?p.faltasPorMes?.[selectedMonth]===3:p.faltasPorMes?.[selectedMonth]>=limiteFaltas))).filter(p=>fold([p.nombre,p.usuario,p.comunidad].join(' ')).includes(fold(directoryQuery)));
+    el('cards').innerHTML=matches.map(p=>'<button type="button" class="directory-person" data-person="'+escape(p.id)+'">'+avatar(p)+'<span><strong>'+escape(p.nombre)+'</strong><small>Usuario · '+escape(p.usuario)+'</small><small>'+escape(p.comunidad||'Comunidad pendiente')+' · '+sum(records.filter(r=>r.person===p.id))+' h</small>'+avisoFaltas(p,selectedMonth)+'</span><b aria-hidden="true">›</b></button>').join('')||'<p>No se encontraron participantes.</p>';
     el('cards').querySelectorAll('[data-person]').forEach(b=>b.onclick=()=>{
       if(!guard())return;dirty=false;profileId=b.dataset.person;draw(true);el('backDirectory').focus();window.scrollTo(0,0);
     });
   }
-  filter();search.oninput=filter;
+  filter();search.oninput=filter;el('riesgoMes').onchange=filter;
 }
 function activityInputs(){
   return field('Nombre de la actividad','title')+field('Fecha','date','date')+'<label>Hora<input name="time" type="time"></label><label>Lugar<input name="place"></label>'+select('Tipo de horas','category',categories)+field('Horas por joven','hours','number','min="0" max="24" step="1"')+'<label>Descripción<textarea name="description"></textarea></label>';
@@ -428,7 +443,7 @@ function pendingAttendance(root,a,reload){
     row.innerHTML='<div><strong>'+escape(p.nombre)+'</strong><p>'+escape(p.usuario)+'</p>'+etiqueta('pendiente')+'<div class="quick"><button type="button" data-state="falta">Marcar falta</button><button type="button" class="light" data-state="justificada">Justificar falta</button><button type="button" class="light" data-state="no_aplica">No aplica</button></div></div>';
     row.querySelectorAll('button').forEach(button=>button.onclick=()=>action(async()=>{
       const state=button.dataset.state;
-      const warning=state==='falta'&&p.faltasPorMes?.[a.fecha.slice(0,7)]===2?' Esta tercera falta del mes causa baja automática.':'';
+      const warning=state==='falta'&&p.faltasPorMes?.[a.fecha.slice(0,7)]===limiteFaltas-1?' Esta cuarta falta permitirá a coordinación revisar la baja.':'';
       let motivo='',foto='';
       if(state==='justificada'){
         const datos=await solicitar(root,'Justificar falta','<p>'+escape(p.nombre)+' · '+escape(a.titulo)+'</p><label>Razón de la falta<textarea name="razon" maxlength="240" required></textarea></label>'+adjunto,'Guardar justificación',async f=>{
@@ -534,7 +549,7 @@ function roster(root,a,reload){
     const r=prior.get(p.id), row=document.createElement('div');row.className='list-row';row.dataset.id=p.id;
     row.dataset.estado=estadoPersonal(a,p,r);
     row.dataset.search=normalize([p.nombre,p.usuario].join(' '));
-    row.innerHTML='<strong>'+escape(p.nombre)+'</strong><div class="fila-estado">'+etiqueta(row.dataset.estado)+'</div><label>Asistencia<select name="state"><option value="">Sin registrar</option>'+states+'</select></label><label>Horas<input type="number" name="hours" min="0" max="24" step="1"></label><label><span class="nota-label">Observaciones</span><input name="note" maxlength="240"></label>'+adjunto;
+    row.innerHTML='<strong>'+escape(p.nombre)+'</strong><div class="fila-estado">'+etiqueta(row.dataset.estado)+'</div><div>'+avisoFaltas(p,a.fecha.slice(0,7))+'</div><label>Asistencia<select name="state"><option value="">Sin registrar</option>'+states+'</select></label><label>Horas<input type="number" name="hours" min="0" max="24" step="1"></label><label><span class="nota-label">Observaciones</span><input name="note" maxlength="240"></label>'+adjunto;
     const state=row.querySelector('select'),hours=row.querySelector('[name=hours]');state.value=r?.estado||'';hours.value=r?.horas??a.horas;hours.disabled=state.value!=='presente';row.querySelector('[name=note]').value=r?.nota||'';
     ajustarJustificante(row,state.value);
     state.onchange=()=>{
