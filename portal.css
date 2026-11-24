@@ -119,3 +119,8 @@ header{background:#fffdf9}
 .asistencia-chip[data-tono=abierta],.asistencia-chip[data-tono=proxima] {color:#174e77;background:#dfedfa}
 .asistencia-chip[data-tono=cerrada] {color:white;background:#455363}
 .fila-estado small {font-weight:600;color:#6d4207}
+.directory-person>span:not(.avatar){flex:1}
+.avance-horas{display:grid;gap:4px;border-top:1px solid var(--line);margin-top:6px;padding-top:8px}
+.rubro-horas{display:grid;gap:2px;margin-top:4px;font-size:.85rem}
+.rubro-horas progress{width:100%;max-width:18rem;height:.5rem;accent-color:#00684b}
+.rubro-horas:last-child progress{accent-color:#68519a}

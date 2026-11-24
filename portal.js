@@ -1,3 +1,4 @@
+import {acumularHoras,mostrarAvance} from './avance-horas.js';
 import {browserLocalPersistence,browserSessionPersistence,collection,doc,getDoc,getDocs,getDocsFromServer,indexedDBLocalPersistence,initializeApp,initializeAuth,initializeFirestore,onAuthStateChanged,query,runTransaction,setDoc,signInWithEmailAndPassword,signOut,updateDoc,updatePassword,where} from './firebase-sdk-11.10.0.js';
 import {icon,navigation} from './navegacion.js';
 import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js';
@@ -261,6 +262,18 @@ function avisoFaltas(p,mes){
   const detalle=!p.activo?' · Inactivo':n>=limiteFaltas?' · Revisar baja':n===limiteFaltas-1?' · A una del límite':'';
   return etiqueta(nivel,n+(n===1?' falta injustificada':' faltas injustificadas')+detalle);
 }
+// Las tarjetas comparten la consulta mientras se usa la misma versión del expediente.
+const avancesDirectorio=new WeakMap();
+function horasDelPrograma(persona){
+  if(!avancesDirectorio.has(persona)){
+    const ref=collection(db,'participantes',persona.id,'registros');
+    const lectura=getDocsFromServer(query(ref,where('estado','==','presente')))
+      .then(resultado=>acumularHoras(resultado.docs.map(d=>d.data())))
+      .catch(error=>{avancesDirectorio.delete(persona);throw error});
+    avancesDirectorio.set(persona,lectura);
+  }
+  return avancesDirectorio.get(persona);
+}
 function directory(view,reload){
   const person=people.find(p=>p.id===profileId);
   if(person){
@@ -298,7 +311,7 @@ function directory(view,reload){
     el('backDirectory').onclick=()=>{if(!guard())return;dirty=false;profileId='';draw(true);el('findPerson').focus()};
     return;
   }
-  view.innerHTML='<label>Buscar joven<input type="search" id="findPerson" placeholder="Nombre, usuario o comunidad"></label><label>Faltas del mes<select id="riesgoMes"><option value="">Todos los jóvenes</option><option value="3">A una del límite (3)</option><option value="4">Revisar baja (4 o más)</option></select></label><div id="cards" class="people-grid"></div><div id="rosterTools"></div>';
+  view.innerHTML='<label>Buscar joven<input type="search" id="findPerson" placeholder="Nombre, usuario o comunidad"></label><label>Faltas del mes<select id="riesgoMes"><option value="">Todos los jóvenes</option><option value="3">A una del límite (3)</option><option value="4">Revisar baja (4 o más)</option></select></label><button hidden type="button" id="reintentarHoras">Reintentar carga de horas</button><div id="cards" class="people-grid"></div><div id="rosterTools"></div>';
   view.insertAdjacentHTML('afterbegin','<section class="card"><h3>Gafetes del padrón</h3><p>Cuatro por hoja carta, de 8.5 × 11.5 cm. Imprime al 100 %. Los inactivos aparecen identificados.</p><button id="printRoster">Descargar todos los gafetes</button><span role="status" id="printProgress"></span></section>');
   const print=el('printRoster'),progress=el('printProgress');
   print.disabled=!people.length;
@@ -313,12 +326,32 @@ function directory(view,reload){
     directoryQuery=search.value;
     const nivel=el('riesgoMes').value;
     const matches=people.filter(p=>!nivel||(p.activo&&(nivel==='3'?p.faltasPorMes?.[selectedMonth]===3:p.faltasPorMes?.[selectedMonth]>=limiteFaltas))).filter(p=>fold([p.nombre,p.usuario,p.comunidad].join(' ')).includes(fold(directoryQuery)));
-    el('cards').innerHTML=matches.map(p=>'<button type="button" class="directory-person" data-person="'+escape(p.id)+'">'+avatar(p)+'<span><strong>'+escape(p.nombre)+'</strong><small>Usuario · '+escape(p.usuario)+'</small><small>'+escape(p.comunidad||'Comunidad pendiente')+' · '+sum(records.filter(r=>r.person===p.id))+' h</small>'+avisoFaltas(p,selectedMonth)+'</span><b aria-hidden="true">›</b></button>').join('')||'<p>No se encontraron participantes.</p>';
+    el('cards').innerHTML=matches.map(p=>'<button type="button" class="directory-person" data-person="'+escape(p.id)+'">'+avatar(p)+'<span><strong>'+escape(p.nombre)+'</strong><small>Usuario · '+escape(p.usuario)+'</small><small>'+escape(p.comunidad||'Comunidad pendiente')+' · '+sum(records.filter(r=>r.person===p.id))+' h este mes</small>'+avisoFaltas(p,selectedMonth)+'<span class="avance-horas">Cargando horas del programa…</span>'+'</span><b aria-hidden="true">›</b></button>').join('')||'<p>No se encontraron participantes.</p>';
+    const tarjetas=[...el('cards').querySelectorAll('[data-person]')];
+    async function cargar(){
+      while(tarjetas.length){
+        const tarjeta=tarjetas.shift();
+        if(!tarjeta.isConnected)return;
+        const persona=people.find(p=>p.id===tarjeta.dataset.person);
+        const zona=tarjeta.querySelector('.avance-horas');
+        try{
+          const horas=await horasDelPrograma(persona);
+          if(tarjeta.isConnected)zona.innerHTML=mostrarAvance(horas);
+        }catch{
+          if(tarjeta.isConnected){
+            zona.textContent='Horas pendientes de consulta.';
+            el('reintentarHoras').hidden=false;
+          }
+        }
+      }
+    }
+    el('reintentarHoras').hidden=true;
+    for(let i=0;i<Math.min(4,matches.length);i++)void cargar();
     el('cards').querySelectorAll('[data-person]').forEach(b=>b.onclick=()=>{
       if(!guard())return;dirty=false;profileId=b.dataset.person;draw(true);el('backDirectory').focus();window.scrollTo(0,0);
     });
   }
-  filter();search.oninput=filter;el('riesgoMes').onchange=filter;
+  el('reintentarHoras').onclick=filter;filter();search.oninput=filter;el('riesgoMes').onchange=filter;
 }
 function activityInputs(){
   return field('Nombre de la actividad','title')+field('Fecha','date','date')+'<label>Hora<input name="time" type="time"></label><label>Lugar<input name="place"></label>'+select('Tipo de horas','category',categories)+field('Horas por joven','hours','number','min="0" max="24" step="1"')+'<label>Descripción<textarea name="description"></textarea></label>';
