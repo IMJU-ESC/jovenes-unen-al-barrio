@@ -39,9 +39,21 @@ accountForms(auth,form,notice);
 form('loginForm',async d=>{await signInWithEmailAndPassword(auth,d.user.trim().toLowerCase()+(d.user.includes('@')?'':dominioUsuario),d.pass);el('loginForm').reset()});
 el('logout').onclick=()=>{if(guard())action(()=>signOut(auth))};
 
-onAuthStateChanged(auth,user=>{revision++;page='inicio';profileId='';directoryQuery='';dirty=false;lastScan='';selectedEvent='';stopCamera();content.replaceChildren();people=[];activities=[];records=[];access=null;notice('');el('login').hidden=!!user;el('account').hidden=!user;if(user){content.innerHTML='<p role="status" class="card">Cargando tu panel…</p>'+(redMovil?'':'<a href="?red=movil">¿Tarda en abrir? Probar conexión móvil</a>');action(async()=>{try{await load(user)}catch(err){if(auth.currentUser?.uid===user.uid){content.innerHTML='<button id="retry">Volver a cargar mi panel</button>'+(redMovil?'':'<a href="?red=movil">Probar conexión móvil</a>');el('retry').onclick=()=>action(()=>load(user))}throw err}})}});
+onAuthStateChanged(auth,user=>{revision++;page='inicio';profileId='';directoryQuery='';dirty=false;lastScan='';selectedEvent='';stopCamera();content.replaceChildren();people=[];activities=[];records=[];access=null;notice('');el('login').hidden=!!user;el('account').hidden=!user;if(user){content.innerHTML='<p role="status" class="card">Cargando tu panel…</p>'+(redMovil?'':'<a href="'+escape(enlace('./?red=movil'))+'">¿Tarda en abrir? Probar conexión móvil</a>');action(async()=>{try{await load(user)}catch(err){if(auth.currentUser?.uid===user.uid){content.innerHTML='<button id="retry">Volver a cargar mi panel</button>'+(redMovil?'':'<a href="'+escape(enlace('./?red=movil'))+'">Probar conexión móvil</a>');el('retry').onclick=()=>action(()=>load(user))}throw err}})}});
 async function load(user){
  const seq=++revision;stopCamera();const s=await getDoc(doc(espacio(db),'accesos',user.uid));if(seq!==revision)return;
+ if(!s.exists()&&dependencia&&user.emailVerified){
+   try{
+     await runTransaction(db,async tx=>{
+       const actual=await tx.get(s.ref);
+       if(!actual.exists())tx.set(s.ref,{participante:'ADMIN',activo:true,listo:true});
+     });
+     if(seq===revision)return load(user);
+     return;
+   }catch(error){
+     if(error.code!=='permission-denied')throw error;
+   }
+ }
  if(!s.exists()){awaitActivation({user,db,content,notice,action,refresh:()=>load(user)});return}
  if(!s.data().activo)throw Error('Solicita a coordinación la activación de tu cuenta.');
  access=s.data();

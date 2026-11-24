@@ -1,8 +1,13 @@
 // Incorporar dentro de match /databases/{database}/documents de las reglas vigentes.
-// Las cuentas ADMIN se asignan exclusivamente desde un entorno administrativo.
+// Plantilla: configurar en Firebase el correo verificado de cada titular antes de publicar.
 match /dependencias/{sede} {
   function identificada() {
     return request.auth != null && sede in ['mujer', 'atencion-ciudadana'];
+  }
+  function titular() {
+    return identificada() && request.auth.token.email_verified == true &&
+      ((sede == 'mujer' && request.auth.token.email.lower() == 'SUSTITUIR_MUJER') ||
+       (sede == 'atencion-ciudadana' && request.auth.token.email.lower() == 'SUSTITUIR_ATENCION'));
   }
   function cuentaLocal() {
     return get(/databases/$(database)/documents/dependencias/$(sede)/accesos/$(request.auth.uid)).data;
@@ -11,8 +16,7 @@ match /dependencias/{sede} {
     return identificada() && cuentaLocal().activo == true && cuentaLocal().listo == true;
   }
   function coordina() {
-    return habilitada() && cuentaLocal().participante == 'ADMIN'
-      && request.auth.token.email_verified == true;
+    return titular() && habilitada() && cuentaLocal().participante == 'ADMIN';
   }
   function expedientePropio(id) {
     return habilitada() && cuentaLocal().participante == id && id != 'ADMIN';
@@ -20,8 +24,7 @@ match /dependencias/{sede} {
   match /accesos/{uid} {
     allow get: if identificada() && (request.auth.uid == uid || coordina());
     allow list: if coordina();
-    allow create: if coordina() && request.resource.data.participante is string
-      && request.resource.data.participante != 'ADMIN';
+    allow create: if (titular() && uid == request.auth.uid && request.resource.data == {'participante':'ADMIN','activo':true,'listo':true}) || (coordina() && request.resource.data.participante is string && request.resource.data.participante != 'ADMIN');
     allow update: if (coordina() && resource.data.participante != 'ADMIN'
       && request.resource.data.participante == resource.data.participante)
       || (identificada() && request.auth.uid == uid && resource.data.activo == true
