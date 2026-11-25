@@ -6,7 +6,7 @@ import {icon,navigation} from './navegacion.js?v=movil2';
 import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js?v=logos1';
 import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=horas4';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=sedes1';
-import {manageRoster,cambiarEstado} from './padron.js?v=horas4';
+import {manageRoster,cambiarEstado,renovarAcceso} from './padron.js?v=recup7';
 
 const app=initializeApp(await (await fetch('./firebase-web.json')).json());
 const auth=initializeAuth(app,{persistence:[indexedDBLocalPersistence,browserLocalPersistence,browserSessionPersistence]});
@@ -298,7 +298,7 @@ function horasDelPrograma(persona){
 function directory(view,reload){
   const person=people.find(p=>p.id===profileId);
   if(person){
-    view.innerHTML='<button class="light" id="backDirectory">← Volver al directorio</button><section class="profile-head">'+avatar(person)+'<div><h3>'+escape(person.nombre)+'</h3><p>Usuario del padrón · <strong>'+escape(person.usuario)+'</strong></p></div></section><div class="quick profile-controls"><button id="profileEdit">Editar expediente</button><button class="light" id="profileAccess" '+(person.activo?'':'disabled')+'>Recuperar acceso</button><button id="profileHours" '+(person.activo?'':'disabled')+'>Sumar horas</button><button class="light" data-task="qr">Escanear QR</button><button type="button" id="profileAttendance">Pasar lista individual</button></div><section id="perfilAsistencia" class="card"></section><section class="card"><h3>Datos del joven</h3>'+personFields(person)+'<p><strong>'+sum(records.filter(r=>r.person===person.id))+' h</strong> acreditadas en el mes seleccionado</p></section><div id="profileBadge"></div><section id="profileEditor" hidden></section>';
+    view.innerHTML='<button class="light" id="backDirectory">← Volver al directorio</button><section class="profile-head">'+avatar(person)+'<div><h3>'+escape(person.nombre)+'</h3><p>Usuario · <strong>'+escape(person.usuarioAcceso||person.usuario)+'</strong></p></div></section><div class="quick profile-controls"><button id="profileEdit">Editar expediente</button><button class="light" id="profileAccess" '+(person.activo?'':'disabled')+'>Generar contraseña temporal</button><button id="profileHours" '+(person.activo?'':'disabled')+'>Sumar horas</button><button class="light" data-task="qr">Escanear QR</button><button type="button" id="profileAttendance">Pasar lista individual</button></div><section id="perfilAsistencia" class="card"></section><section class="card"><h3>Datos del joven</h3>'+personFields(person)+'<p><strong>'+sum(records.filter(r=>r.person===person.id))+' h</strong> acreditadas en el mes seleccionado</p></section><div id="profileBadge"></div><section id="profileEditor" hidden></section>';
     const mes=selectedMonth;
     const periodo=new Date(mes+'-15T12:00:00').toLocaleString('es-MX',{month:'long',year:'numeric'});
     el('perfilAsistencia').insertAdjacentHTML('beforebegin','<section class="card"><h3>Faltas de '+escape(periodo)+'</h3>'+avisoFaltas(person,mes)+(person.activo&&(person.faltasPorMes?.[mes]||0)>=limiteFaltas?' <button id="bajaMensual">Dar de baja por faltas</button>':'')+'</section>');
@@ -330,15 +330,21 @@ function directory(view,reload){
       editor.hidden=false;editor.querySelector('details').open=true;editor.scrollIntoView({block:'center'});editor.querySelector('input[name=nombre]').focus();
       editor.oninput=()=>{dirty=true};
     };
-    el('profileAccess').onclick=()=>{
-      navigate('cuenta');
-      if(page!=='cuenta')return;
-      const picker=el('bindPerson');
-      picker.value=person.id;
-      picker.closest('details').open=true;
-      const uid=el('bindProfile').elements.uid;
-      uid.focus();uid.scrollIntoView({block:'center'});
-    };
+    el('profileAccess').onclick=e=>action(async()=>{
+      if(!confirm('¿Confirmaste la identidad de '+person.nombre+'? Se reemplazará su acceso por un usuario nuevo con contraseña temporal.'))return;
+      const boton=e.currentTarget||el('profileAccess');
+      const {usuario,clave}=await renovarAcceso(app,db,person);
+      person.usuarioAcceso=usuario;
+      if(!boton.isConnected)return;
+      view.querySelector('.profile-head p strong').textContent=usuario;
+      const panel=document.createElement('section');panel.className='card';
+      panel.innerHTML='<h3>Nuevo acceso listo</h3><label>Mensaje privado para el joven<textarea readonly rows="8"></textarea></label><button type="button">Copiar mensaje</button>';
+      const mensaje=panel.querySelector('textarea');
+      mensaje.value='Hola, '+person.nombre+'. Te compartimos tu nuevo acceso a Jóvenes Unen al Barrio.\n\n'+enlace('./')+'\nUsuario: '+usuario+'\nContraseña temporal: '+clave+'\n\nEntra con estos datos y elige tu contraseña personal.';
+      panel.querySelector('button').onclick=async()=>{try{await navigator.clipboard.writeText(mensaje.value);notice('Mensaje copiado para enviar en privado.')}catch{mensaje.focus();mensaje.select();notice('Selecciona Copiar para guardar el mensaje.')}};
+      boton.closest('.profile-controls').after(panel);
+      boton.hidden=true;panel.scrollIntoView({block:'center'});mensaje.focus();
+    },e.currentTarget);
     el('profileHours').onclick=()=>{navigate('horas');if(page==='horas')openManual(person.id)};
     view.querySelectorAll('[data-task]').forEach(b=>b.onclick=()=>navigate(b.dataset.task));
     el('backDirectory').onclick=()=>{if(!guard())return;dirty=false;profileId='';draw(true);el('findPerson').focus()};
