@@ -24,7 +24,7 @@ match /dependencias/{sede} {
   match /accesos/{uid} {
     allow get: if identificada() && (request.auth.uid == uid || coordina());
     allow list: if coordina();
-    allow create: if (titular() && uid == request.auth.uid && request.resource.data == {'participante':'ADMIN','activo':true,'listo':true}) || (coordina() && request.resource.data.participante is string && request.resource.data.participante != 'ADMIN');
+    allow create: if (coordina() && request.resource.data.participante is string && request.resource.data.participante != 'ADMIN');
     allow update: if (coordina() && resource.data.participante != 'ADMIN'
       && request.resource.data.participante == resource.data.participante)
       || (identificada() && request.auth.uid == uid && resource.data.activo == true

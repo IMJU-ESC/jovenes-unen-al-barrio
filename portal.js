@@ -5,7 +5,7 @@ import {browserLocalPersistence,browserSessionPersistence,collection,doc,getDoc,
 import {icon,navigation} from './navegacion.js?v=barrio13';
 import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js?v=logos1';
 import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=puesto12';
-import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=sedes1';
+import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=acceso14';
 import {manageRoster,cambiarEstado,cambiarClaveDeAlta} from './padron.js?v=alta10';
 
 const app=initializeApp(await (await fetch('./firebase-web.json')).json());
@@ -28,7 +28,7 @@ let mostrarBajas=false;
 let page='inicio', cameraVersion=0, selectedEvent='',lastScan='',dirty=false;
 function stopCamera(){cameraVersion++;cancelAnimationFrame(frame);stream?.getTracks().forEach(t=>t.stop());stream=null}
 function notice(s){el('notice').textContent=s}
-function report(e){if(!navigator.onLine||['unavailable','auth/network-request-failed','deadline-exceeded'].includes(e.code)){notice('Se interrumpió la conexión. Comprueba tus datos móviles y vuelve a intentar.');return}notice(e.code==='auth/invalid-credential'?'Revisa tu usuario y contraseña.':e.code==='permission-denied'?'Tu cuenta no tiene acceso a estos datos.':e.message||'No se pudo completar la operación.')}
+function report(e){if(e.code==='auth/too-many-requests'){notice('Demasiados intentos. Espera antes de volver a entrar. Si tienes dudas sobre tu clave, pide ayuda a coordinación.');return}if(!navigator.onLine||['unavailable','auth/network-request-failed','deadline-exceeded'].includes(e.code)){notice('Se interrumpió la conexión. Comprueba tus datos móviles y vuelve a intentar.');return}notice(e.code==='auth/invalid-credential'?'Revisa tu usuario y contraseña.':e.code==='permission-denied'?'Tu cuenta no tiene acceso a estos datos.':e.message||'No se pudo completar la operación.')}
 async function action(fn,button){if(button?.disabled)return;if(button)button.disabled=true;notice('');try{await fn()}catch(e){report(e)}finally{if(button)button.disabled=false}}
 function form(id,fn){el(id).onsubmit=e=>{e.preventDefault();const f=e.currentTarget;action(()=>fn(Object.fromEntries(new FormData(f))),f.querySelector('button[type=submit],button:not([type])'))}}
 function field(label,name,type='text',extra=''){return '<label>'+label+'<input name="'+name+'" type="'+type+'" '+extra+' required></label>'}
@@ -43,18 +43,6 @@ el('logout').onclick=()=>{if(guard())action(()=>signOut(auth))};
 onAuthStateChanged(auth,user=>{revision++;page='inicio';profileId='';directoryQuery='';dirty=false;lastScan='';selectedEvent='';stopCamera();content.replaceChildren();people=[];activities=[];records=[];access=null;notice('');el('login').hidden=!!user;el('account').hidden=!user;if(user){content.innerHTML='<p role="status" class="card">Cargando tu panel…</p>'+(redMovil?'':'<a href="'+escape(enlace('./?red=movil'))+'">¿Tarda en abrir? Probar conexión móvil</a>');action(async()=>{try{await load(user)}catch(err){if(auth.currentUser?.uid===user.uid){content.innerHTML='<button id="retry">Volver a cargar mi panel</button>'+(redMovil?'':'<a href="'+escape(enlace('./?red=movil'))+'">Probar conexión móvil</a>');el('retry').onclick=()=>action(()=>load(user))}throw err}})}});
 async function load(user){
  const seq=++revision;stopCamera();const s=await getDoc(doc(espacio(db),'accesos',user.uid));if(seq!==revision)return;
- if(!s.exists()&&dependencia&&user.emailVerified){
-   try{
-     await runTransaction(db,async tx=>{
-       const actual=await tx.get(s.ref);
-       if(!actual.exists())tx.set(s.ref,{participante:'ADMIN',activo:true,listo:true});
-     });
-     if(seq===revision)return load(user);
-     return;
-   }catch(error){
-     if(error.code!=='permission-denied')throw error;
-   }
- }
  if(!s.exists()){awaitActivation({user,db,content,notice,action,refresh:()=>load(user)});return}
  if(!s.data().activo)throw Error('Solicita a coordinación la activación de tu cuenta.');
  access=s.data();
