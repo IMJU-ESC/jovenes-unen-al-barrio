@@ -1,6 +1,6 @@
 import {espacio,dominioUsuario} from './dependencias.js';
 import {limiteFaltas} from './movimientos.js?v=horas4';
-import {collection,createUserWithEmailAndPassword,deleteApp,doc,getDocsFromServer,inMemoryPersistence,initializeApp,initializeAuth,query,runTransaction,signInWithEmailAndPassword,updateDoc,where} from './firebase-sdk-11.10.0.js';
+import {collection,createUserWithEmailAndPassword,deleteApp,doc,getDoc,getDocsFromServer,inMemoryPersistence,initializeApp,initializeAuth,query,runTransaction,signInWithEmailAndPassword,updateDoc,updatePassword,where} from './firebase-sdk-11.10.0.js';
 import {imageCanvas} from './credencial.js?v=logos1';
 
 const fields = [
@@ -57,6 +57,19 @@ export async function cambiarEstado(db,p,enabled,changes={},mes=''){
     for(const account of targets)tx.update(account.ref,{activo:enabled,suspendidoPorPadron:!enabled});
     tx.update(profileRef,{...changes,activo:enabled,bajaPorFaltas:false});
   });
+}
+export async function cambiarClaveDeAlta(app,db,persona,actual,nueva){
+  const secundaria=initializeApp(app.options,'clave-'+crypto.randomUUID());
+  try{
+    const auth=initializeAuth(secundaria,{persistence:inMemoryPersistence});
+    const correo=(persona.usuarioAcceso||persona.usuario)+dominioUsuario;
+    const {user}=await signInWithEmailAndPassword(auth,correo,actual);
+    const registro=await getDoc(doc(espacio(db),'accesos',user.uid));
+    const acceso=registro.data();
+    if(!acceso?.activo||acceso.participante!==persona.id||acceso.listo!==false)
+      throw Error('Esta cuenta ya no tiene un primer ingreso pendiente. Usa la recuperación por correo o solicita ayuda a quien administra Firebase.');
+    await updatePassword(user,nueva);
+  }finally{await deleteApp(secundaria)}
 }
 export async function renovarAcceso(app,db,persona){
   const scope=espacio(db);

@@ -6,7 +6,7 @@ import {icon,navigation} from './navegacion.js?v=movil2';
 import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js?v=logos1';
 import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=horas4';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=sedes1';
-import {manageRoster,cambiarEstado} from './padron.js?v=recup7';
+import {manageRoster,cambiarEstado,cambiarClaveDeAlta} from './padron.js?v=alta10';
 
 const app=initializeApp(await (await fetch('./firebase-web.json')).json());
 const auth=initializeAuth(app,{persistence:[indexedDBLocalPersistence,browserLocalPersistence,browserSessionPersistence]});
@@ -351,6 +351,31 @@ function directory(view,reload){
         }
         try{await navigator.clipboard.writeText(mensaje.value);notice('Mensaje copiado para enviar en privado.')}catch{mensaje.focus();mensaje.select();notice('Copia el mensaje seleccionado.')}
       },boton);
+      const alterna=document.createElement('details');
+      const resumen=document.createElement('summary');resumen.textContent='Otras opciones de recuperación';
+      alterna.append(resumen,...Array.from(panel.childNodes));panel.append(alterna);
+      const cambio=document.createElement('form');
+      cambio.innerHTML='<h3>Cambiar contraseña de primer ingreso</h3><label>Clave temporal del mensaje anterior<input name="anterior" type="password" required autocomplete="off"></label><label>Nueva clave temporal (mínimo 12 caracteres)<input name="nueva" type="password" minlength="12" required autocomplete="new-password"></label><button>Guardar y preparar mensaje</button><p role="status"></p><textarea hidden readonly rows="7" aria-label="Mensaje privado"></textarea>';
+      panel.prepend(cambio);
+      cambio.onsubmit=evento=>{
+        evento.preventDefault();
+        const guardar=cambio.querySelector('button'),estado=cambio.querySelector('p'),salida=cambio.querySelector('textarea');
+        action(async()=>{
+          if(!salida.hidden){
+            try{await navigator.clipboard.writeText(salida.value);estado.textContent='Mensaje copiado.'}catch{salida.focus();salida.select();estado.textContent='Copia el texto seleccionado.'}
+            return;
+          }
+          const anterior=cambio.elements.anterior.value.trim(),nueva=cambio.elements.nueva.value;
+          if(nueva.trim()!==nueva||nueva===anterior){estado.textContent='Elige una clave distinta, sin espacios al inicio ni al final.';return}
+          try{await cambiarClaveDeAlta(app,db,person,anterior,nueva)}catch(err){
+            estado.textContent=['auth/wrong-password','auth/invalid-credential','auth/user-not-found'].includes(err.code)?'La clave de alta no coincide. Si vinculó un correo, el joven puede usar Olvidé mi contraseña.':err.message;return;
+          }
+          salida.value='Hola, '+person.nombre+'. Entra en '+enlace('./')+' con tu usuario '+usuario+' y esta nueva contraseña temporal: '+nueva+'. Al entrar, elige tu contraseña personal.';
+          salida.hidden=false;
+          for(const campo of cambio.querySelectorAll('input')){campo.value='';campo.disabled=true;campo.closest('label').hidden=true}
+          guardar.textContent='Copiar mensaje';estado.textContent='Clave actualizada.';
+        },guardar);
+      };
       e.currentTarget.closest('.profile-controls').after(panel);e.currentTarget.hidden=true;panel.scrollIntoView({block:'center'});
     };
     el('profileHours').onclick=()=>{navigate('horas');if(page==='horas')openManual(person.id)};
