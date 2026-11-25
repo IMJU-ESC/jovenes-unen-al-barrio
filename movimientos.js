@@ -1,7 +1,7 @@
 import {espacio} from './dependencias.js';
 import {collection,doc,getDocsFromServer,increment,query,runTransaction,where} from './firebase-sdk-11.10.0.js';
 
-const caps={actividad:80,aprendizaje:10};
+const categorias=new Set(['actividad','aprendizaje']);
 const key=r=>r?JSON.stringify([r.fecha,r.titulo,r.horas,r.estado,r.categoria,r.nota||'',r.evidencia||'',r.tipo]):null;
 
 export const limiteFaltas=4;
@@ -50,14 +50,9 @@ export async function saveRows(db,changes,activity=null,scan=false){
       if(scan&&old)return {existing:old};
       if(key(old)!==key(c.prior))throw Error('Cambió un registro desde que abriste la lista. Actualiza y revisa antes de guardar.');
       if(c.next){
-        const r=c.next,month=r.fecha.slice(0,7);
-        if(!(r.categoria in caps)||!Number.isInteger(r.horas)||r.horas<0||r.horas>24)throw Error('Revisa la categoría y las horas.');
-        if(r.estado==='presente'&&r.horas>0){
-          const rows=await getDocsFromServer(query(collection(person,'registros'),where('fecha','>=',month+'-01'),where('fecha','<=',month+'-31')));
-          let total=r.horas;
-          for(const d of rows.docs){const v=d.data();if(d.id!==record.id&&v.categoria===r.categoria&&v.estado==='presente')total+=Number(v.horas)}
-          if(total>caps[r.categoria])throw Error(profile.data().nombre+' superaría el máximo mensual de '+caps[r.categoria]+' horas de '+r.categoria+'.');
-        }
+        const r=c.next;
+        if(!categorias.has(r.categoria)||!Number.isInteger(r.horas)||r.horas<0||r.horas>24)throw Error('Revisa la categoría y las horas.');
+
       }
       const data=profile.data();
       const meses={...(data.faltasPorMes||await contarFaltas(person))};

@@ -1,5 +1,5 @@
 import {espacio,dominioUsuario} from './dependencias.js';
-import {limiteFaltas} from './movimientos.js?v=sedes1';
+import {limiteFaltas} from './movimientos.js?v=horas4';
 import {collection,createUserWithEmailAndPassword,deleteApp,doc,getDocsFromServer,inMemoryPersistence,initializeApp,initializeAuth,query,runTransaction,signInWithEmailAndPassword,updateDoc,where} from './firebase-sdk-11.10.0.js';
 import {imageCanvas} from './credencial.js?v=logos1';
 

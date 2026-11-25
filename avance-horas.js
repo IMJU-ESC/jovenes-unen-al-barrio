@@ -16,9 +16,10 @@ export function mostrarAvance(horas){
   const faltan=metas.reduce((n,[categoria,,meta])=>n+Math.max(0,meta-horas[categoria]),0);
   const filas=metas.map(([categoria,nombre,meta])=>{
     const valor=horas[categoria],pendientes=Math.max(0,meta-valor);
+    const avance=valor>meta?'Meta cumplida · '+(valor-meta)+' h adicionales':'Meta cumplida';
     return '<span class="rubro-horas"><span>'+nombre+' · '+valor+' / '+meta+' h</span>'+
       '<progress aria-label="'+nombre+'" max="'+meta+'" value="'+Math.min(meta,valor)+'"></progress>'+
-      '<small>'+(pendientes?'Faltan '+pendientes+' h':'Meta cumplida')+'</small></span>';
+      '<small>'+(pendientes?'Faltan '+pendientes+' h':avance)+'</small></span>';
   }).join('');
   return '<strong>'+total+' h acumuladas</strong><small>'+(faltan?'Faltan '+faltan+' h para cumplir ambas metas':'Meta de 90 h cumplida')+'</small>'+filas;
 }
