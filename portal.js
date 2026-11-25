@@ -402,22 +402,80 @@ function activityInputs(){
   return field('Nombre de la actividad','title')+field('Fecha','date','date')+'<label>Hora<input name="time" type="time"></label><label>Lugar<input name="place"></label>'+select('Tipo de horas','category',categories)+field('Horas por joven','hours','number','min="0" max="24" step="1"')+'<label>Descripción<textarea name="description"></textarea></label>';
 }
 function activityData(d){if(!d.title.trim())throw Error('Escribe el nombre de la actividad.');return {titulo:d.title.trim(),fecha:d.date,hora:d.time,lugar:d.place.trim(),categoria:d.category,horas:Number(d.hours),descripcion:d.description.trim()}}
+function fotosActividad(a){
+  return (Array.isArray(a.evidencias)?a.evidencias:[]).filter(f=>typeof f==='string'&&f.startsWith('data:image/'));
+}
+async function comprimirEvidencia(file){
+  const canvas=await imageCanvas(file,768);
+  const jpeg=canvas.toDataURL('image/jpeg',0.64);
+  const webp=canvas.toDataURL('image/webp',0.66);
+  return webp.startsWith('data:image/webp;')&&webp.length<jpeg.length?webp:jpeg;
+}
+function albumActividad(a,fotos){
+  const album=document.createElement('details');
+  album.className='album-actividad';
+  album.innerHTML='<summary><span>'+escape(fullDate(a.fecha))+'</span><strong>'+escape(a.titulo)+'</strong><small>'+fotos.length+' foto'+(fotos.length===1?'':'s')+'</small></summary>';
+  let posicion=0;
+  album.ontoggle=()=>{
+    album.querySelector('figure')?.remove();
+    if(!album.open)return;
+    const figure=document.createElement('figure');
+    const img=new Image();img.decoding='async';
+    const pie=document.createElement('figcaption');
+    const indicador=document.createElement('span');indicador.setAttribute('aria-live','polite');
+    const anterior=document.createElement('button'),siguiente=document.createElement('button');
+    anterior.textContent='Anterior';siguiente.textContent='Siguiente';
+    function mostrar(){
+      img.src=fotos[posicion];img.alt='Evidencia '+(posicion+1)+' de '+a.titulo;
+      indicador.textContent=(posicion+1)+' de '+fotos.length;
+      anterior.disabled=posicion===0;siguiente.disabled=posicion===fotos.length-1;
+    }
+    anterior.onclick=()=>{posicion--;mostrar()};siguiente.onclick=()=>{posicion++;mostrar()};
+    if(fotos.length>1)pie.append(anterior,indicador,siguiente);else pie.append(indicador);
+    figure.append(img,pie);album.append(figure);mostrar();
+  };
+  return album;
+}
 function calendar(view,monthly,admin,reload){
+  view.innerHTML='<div class="agenda-menu" role="group" aria-label="Vista de actividades"><button type="button" aria-pressed="true">Actividades</button><button type="button" aria-pressed="false">Evidencias</button></div><div class="agenda-eventos"></div><section class="agenda-albumes" hidden><h3>Evidencias del mes</h3></section>';
+  const eventos=view.querySelector('.agenda-eventos'),albumes=view.querySelector('.agenda-albumes');
+  const botones=[...view.querySelectorAll('.agenda-menu button')];
+  let preparado=false;
+  function cambiar(fotos){
+    eventos.hidden=fotos;albumes.hidden=!fotos;
+    botones.forEach((b,i)=>b.setAttribute('aria-pressed',String(i===Number(fotos))));
+    if(fotos&&!preparado){
+      for(const a of [...monthly].reverse()){
+        const imagenes=fotosActividad(a);
+        if(imagenes.length)albumes.append(albumActividad(a,imagenes));
+      }
+      if(!albumes.querySelector('details'))albumes.insertAdjacentHTML('beforeend','<p class="card">Todavía no hay fotos de actividades en el mes seleccionado.</p>');
+      preparado=true;
+    }
+  }
+  botones[0].onclick=()=>cambiar(false);botones[1].onclick=()=>cambiar(true);
   if(admin){
-    view.innerHTML='<details><summary>Crear actividad</summary><form id="newact">'+activityInputs()+'<button>Publicar actividad</button></form></details>';
+    eventos.innerHTML='<details><summary>Crear actividad</summary><form id="newact">'+activityInputs()+'<button>Publicar actividad</button></form></details>';
     el('newact').elements.date.value=stamp();
     form('newact',async d=>{await setDoc(doc(collection(espacio(db),'actividades')),{...activityData(d),cierreAutomatico:true});selectedMonth=d.date.slice(0,7);await reload('Actividad publicada.')});
   }
   for(const a of monthly){
-    const item=document.createElement('section');item.className='card';item.innerHTML=agendaList([a]);view.append(item);
-    if(a.evidencias?.length){const gallery=document.createElement('div');gallery.className='gallery';for(const e of a.evidencias){if(typeof e==='string'&&e.startsWith('data:image/')){const img=new Image();img.src=e;img.alt='Evidencia de '+a.titulo;gallery.append(img)}}item.append(gallery)}
+    const item=document.createElement('section');item.className='card';item.innerHTML=agendaList([a]);eventos.append(item);
+    if(fotosActividad(a).length){
+      const link=document.createElement('button');link.type='button';link.className='light';link.textContent='Ver fotos de la actividad';
+      link.onclick=()=>{
+        cambiar(true);
+        const album=albumes.querySelectorAll('details')[[...monthly].reverse().filter(x=>fotosActividad(x).length).findIndex(x=>x.id===a.id)];
+        album.open=true;album.querySelector('summary').focus();
+      };item.append(link);
+    }
     if(!admin)continue;
     const edit=document.createElement('details');
     edit.innerHTML='<summary>Editar actividad o agregar evidencia</summary><form>'+activityInputs()+'<label>Fotografía de evidencia<input type="file" name="evidence" accept="image/jpeg,image/png,image/webp"></label><button>Guardar cambios</button></form>';item.append(edit);
     const f=edit.querySelector('form');for(const [k,v] of Object.entries({title:a.titulo,date:a.fecha,time:a.hora,place:a.lugar,category:a.categoria,hours:a.horas,description:a.descripcion}))f.elements[k].value=v??'';
     f.onsubmit=e=>{e.preventDefault();action(async()=>{
       const data=activityData(Object.fromEntries(new FormData(f))), file=f.elements.evidence.files[0];
-      const photo=file?(await imageCanvas(file,768)).toDataURL('image/jpeg',0.65):null;
+      const photo=file?await comprimirEvidencia(file):null;
       // Las participaciones guardadas conservan la fecha, categoría y horas acreditadas.
       await runTransaction(db,async tx=>{
         const ref=doc(espacio(db),'actividades',a.id),current=(await tx.get(ref)).data();
@@ -429,7 +487,7 @@ function calendar(view,monthly,admin,reload){
       });selectedMonth=data.fecha.slice(0,7);await reload('Actividad actualizada.');
     },f.querySelector('button'))};
   }
-  if(!monthly.length)view.insertAdjacentHTML('beforeend',agendaList([]));
+  if(!monthly.length)eventos.insertAdjacentHTML('beforeend',agendaList([]));
 }
 function attendanceView(view,monthly,reload,scanner){
   const options=monthly.filter(a=>a.fecha<=stamp());
