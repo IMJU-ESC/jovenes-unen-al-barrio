@@ -26,7 +26,7 @@ const estado=document.getElementById('conexion'),reintentar=document.getElementB
 function indicar(mensaje){estado.textContent=mensaje;reintentar.hidden=false;document.getElementById('modoMovil').hidden=new URLSearchParams(location.search).get('red')==='movil'}
 reintentar.onclick=()=>location.reload();
 const espera=setTimeout(()=>indicar('La conexión está tardando. Puedes esperar o volver a intentar.'),10000);
-import('./portal.js?v=recup7').then(()=>{
+import('./portal.js?v=usuario8').then(()=>{
   clearTimeout(espera);estado.hidden=reintentar.hidden=document.getElementById('modoMovil').hidden=true;
   document.querySelectorAll('#login form button[type="submit"],#login form button:not([type])').forEach(b=>b.disabled=false);
 }).catch(()=>{
