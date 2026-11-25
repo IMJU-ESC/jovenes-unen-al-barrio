@@ -24,6 +24,7 @@ const stamp=()=>new Intl.DateTimeFormat('sv-SE',{timeZone:'America/Mazatlan'}).f
 const content=el('content');
 let selectedMonth=stamp().slice(0,7),people=[],activities=[],records=[],access=null,stream=null,frame=0,revision=0;
 let profileId='', directoryQuery='';
+let mostrarBajas=false;
 let page='inicio', cameraVersion=0, selectedEvent='',lastScan='',dirty=false;
 function stopCamera(){cameraVersion++;cancelAnimationFrame(frame);stream?.getTracks().forEach(t=>t.stop());stream=null}
 function notice(s){el('notice').textContent=s}
@@ -307,6 +308,18 @@ function directory(view,reload){
       await cambiarEstado(db,person,false,{},mes);
       await reload('Baja registrada.');
     },baja);
+    const statusButton=document.createElement('button');
+    statusButton.type='button';statusButton.className='light';
+    statusButton.textContent=person.activo?'Dar de baja':'Reactivar joven';
+    view.querySelector('.profile-controls').append(statusButton);
+    statusButton.onclick=()=>action(async()=>{
+      const habilitar=!person.activo;
+      const mensaje=habilitar?'Volverá al padrón activo y al pase de lista.':'Se suspenderá su acceso y saldrá del pase de lista. Su historial seguirá en Dados de baja.';
+      if(!guard()||!confirm(statusButton.textContent+' · '+person.nombre+'? '+mensaje))return;
+      await cambiarEstado(db,person,habilitar);
+      mostrarBajas=!habilitar;profileId='';directoryQuery='';
+      await reload(habilitar?'Joven reactivado.':'Joven dado de baja.');
+    },statusButton);
     const attendance=el('perfilAsistencia');
     actividadesDelPerfil(attendance,person,reload);
     el('profileAttendance').onclick=()=>{attendance.querySelector('h3').focus();attendance.scrollIntoView({block:'start'})};
@@ -341,11 +354,23 @@ function directory(view,reload){
   },print);
   manageRoster(el('rosterTools'),{app,db,people,reload,onError:report,createOnly:true});
   const fold=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  const grupos=document.createElement('div');
+  grupos.className='quick roster-tabs';grupos.setAttribute('role','group');grupos.setAttribute('aria-label','Estado del padrón');
+  view.prepend(grupos);
+  for(const bajas of [false,true]){
+    const boton=document.createElement('button');
+    boton.type='button';boton.setAttribute('aria-pressed',String(bajas===mostrarBajas));
+    boton.className=bajas===mostrarBajas?'':'light';
+    boton.textContent=(bajas?'Dados de baja':'Activos')+' ('+people.filter(p=>Boolean(p.activo)!==bajas).length+')';
+    boton.onclick=()=>{mostrarBajas=bajas;directoryQuery='';directory(view,reload)};
+    grupos.append(boton);
+  }
+  el('riesgoMes').closest('label').hidden=mostrarBajas;
   const search=el('findPerson');search.value=directoryQuery;
   function filter(){
     directoryQuery=search.value;
     const nivel=el('riesgoMes').value;
-    const matches=people.filter(p=>!nivel||(p.activo&&(nivel==='3'?p.faltasPorMes?.[selectedMonth]===3:p.faltasPorMes?.[selectedMonth]>=limiteFaltas))).filter(p=>fold([p.nombre,p.usuario,p.comunidad].join(' ')).includes(fold(directoryQuery)));
+    const matches=people.filter(p=>Boolean(p.activo)!==mostrarBajas).filter(p=>!nivel||(p.activo&&(nivel==='3'?p.faltasPorMes?.[selectedMonth]===3:p.faltasPorMes?.[selectedMonth]>=limiteFaltas))).filter(p=>fold([p.nombre,p.usuario,p.comunidad].join(' ')).includes(fold(directoryQuery)));
     el('cards').innerHTML=matches.map(p=>'<button type="button" class="directory-person" data-person="'+escape(p.id)+'">'+avatar(p)+'<span><strong>'+escape(p.nombre)+'</strong><small>Usuario · '+escape(p.usuario)+'</small><small>'+escape(p.comunidad||'Comunidad pendiente')+' · '+sum(records.filter(r=>r.person===p.id))+' h este mes</small>'+avisoFaltas(p,selectedMonth)+'<span class="avance-horas">Cargando horas del programa…</span>'+'</span><b aria-hidden="true">›</b></button>').join('')||'<p>No se encontraron participantes.</p>';
     const tarjetas=[...el('cards').querySelectorAll('[data-person]')];
     async function cargar(){
@@ -493,7 +518,7 @@ function pendingAttendance(root,a,reload){
   if(!pending.length)section.insertAdjacentHTML('beforeend','<p>Todos los participantes activos tienen registro para este evento.</p>');
   for(const p of pending){
     const row=document.createElement('div');row.className='event';
-    row.innerHTML='<div><strong>'+escape(p.nombre)+'</strong><p>'+escape(p.usuario)+'</p>'+etiqueta('pendiente')+'<div class="quick"><button type="button" data-state="falta">Marcar falta</button><button type="button" class="light" data-state="justificada">Justificar falta</button><button type="button" class="light" data-state="no_aplica">No aplica</button></div></div>';
+    row.innerHTML='<div>'+identidadLista(p)+etiqueta('pendiente')+'<div class="quick"><button type="button" data-state="falta">Marcar falta</button><button type="button" class="light" data-state="justificada">Justificar falta</button><button type="button" class="light" data-state="no_aplica">No aplica</button></div></div>';
     row.querySelectorAll('button').forEach(button=>button.onclick=()=>action(async()=>{
       const state=button.dataset.state;
       const warning=state==='falta'&&p.faltasPorMes?.[a.fecha.slice(0,7)]===limiteFaltas-1?' Esta cuarta falta permitirá a coordinación revisar la baja.':'';
@@ -593,16 +618,19 @@ function scannerTools(root,a,reload){
   };
   document.onvisibilitychange=()=>{if(document.hidden&&video.isConnected&&(stream||!stop.hidden))idle()};
 }
+function identidadLista(p){
+  return '<div class="identidad-lista">'+avatar(p)+'<div><strong>'+escape(p.nombre)+'</strong><small>'+escape(p.usuario||'')+'</small></div></div>';
+}
 function roster(root,a,reload){
   const prior=new Map(records.filter(r=>r.id===a.id).map(r=>[r.person,r]));
-  const active=people.filter(p=>p.activo||prior.has(p.id));
+  const active=people.filter(p=>p.activo);
   root.insertAdjacentHTML('beforeend','<label>Buscar joven<input type="search" id="rosterSearch" placeholder="Nombre, apellido o usuario" autocomplete="off" enterkeyhint="search"></label><label>Mostrar<select id="rosterFilter"><option value="">Todos los estados</option>'+Object.entries(asistenciaVisual).filter(([k])=>['pendiente','presente','falta','justificada','no_aplica','sin_registro'].includes(k)).map(([k,[v]])=>'<option value="'+k+'">'+v+'</option>').join('')+'</select></label><p id="rosterCount" role="status"></p><form id="bulk"><div class="quick"><button type="button" class="light" id="allPresent">Marcar pendientes como presentes</button></div><div id="group"></div><button>Guardar lista</button></form>');
   const normalize=value=>String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
   for(const p of active){
     const r=prior.get(p.id), row=document.createElement('div');row.className='list-row';row.dataset.id=p.id;
     row.dataset.estado=estadoPersonal(a,p,r);
     row.dataset.search=normalize([p.nombre,p.usuario].join(' '));
-    row.innerHTML='<strong>'+escape(p.nombre)+'</strong><div class="fila-estado">'+etiqueta(row.dataset.estado)+'</div><div>'+avisoFaltas(p,a.fecha.slice(0,7))+'</div><label>Asistencia<select name="state"><option value="">Sin registrar</option>'+states+'</select></label><label>Horas<input type="number" name="hours" min="0" max="24" step="1"></label><label><span class="nota-label">Observaciones</span><input name="note" maxlength="240"></label>'+adjunto;
+    row.innerHTML=identidadLista(p)+'<div class="fila-estado">'+etiqueta(row.dataset.estado)+'</div><div>'+avisoFaltas(p,a.fecha.slice(0,7))+'</div><label>Asistencia<select name="state"><option value="">Sin registrar</option>'+states+'</select></label><label>Horas<input type="number" name="hours" min="0" max="24" step="1"></label><label><span class="nota-label">Observaciones</span><input name="note" maxlength="240"></label>'+adjunto;
     const state=row.querySelector('select'),hours=row.querySelector('[name=hours]');state.value=r?.estado||'';hours.value=r?.horas??a.horas;hours.disabled=state.value!=='presente';row.querySelector('[name=note]').value=r?.nota||'';
     ajustarJustificante(row,state.value);
     state.onchange=()=>{

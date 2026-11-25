@@ -152,3 +152,13 @@ body:not([data-marca]) #login nav a:first-child,body[data-marca=mujer] #login na
  .directory-person{content-visibility:auto;contain-intrinsic-size:auto 130px}
  .desk .dock{padding-inline:max(5px,env(safe-area-inset-left))}
 }
+
+.identidad-lista{display:flex;align-items:center;gap:12px;min-width:0}
+.identidad-lista .avatar{flex:none;width:60px;height:68px;object-fit:cover;border-radius:12px}
+.identidad-lista small{display:block;color:#59515a;overflow-wrap:anywhere}
+.roster-tabs{margin-bottom:14px}
+@media(max-width:760px){
+ #group .list-row{border:1px solid var(--line);border-radius:16px;background:white;padding:14px;margin:12px 0;gap:8px}
+ #group .identidad-lista{grid-column:1/-1}
+ #bulk>button:last-child{position:sticky;bottom:calc(72px + env(safe-area-inset-bottom));width:100%;min-height:46px;z-index:2}
+}
