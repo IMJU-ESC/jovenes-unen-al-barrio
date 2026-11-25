@@ -6,7 +6,7 @@ import {icon,navigation} from './navegacion.js?v=movil2';
 import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js?v=logos1';
 import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=horas4';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=sedes1';
-import {manageRoster,cambiarEstado,renovarAcceso} from './padron.js?v=recup7';
+import {manageRoster,cambiarEstado} from './padron.js?v=usuario8';
 
 const app=initializeApp(await (await fetch('./firebase-web.json')).json());
 const auth=initializeAuth(app,{persistence:[indexedDBLocalPersistence,browserLocalPersistence,browserSessionPersistence]});
@@ -331,16 +331,19 @@ function directory(view,reload){
       editor.oninput=()=>{dirty=true};
     };
     el('profileAccess').onclick=e=>action(async()=>{
-      if(!confirm('¿Confirmaste la identidad de '+person.nombre+'? Se reemplazará su acceso por un usuario nuevo con contraseña temporal.'))return;
+      if(!confirm('¿Confirmaste la identidad de '+person.nombre+'? Recibirá una contraseña temporal para su usuario de siempre.'))return;
       const boton=e.currentTarget||el('profileAccess');
-      const {usuario,clave}=await renovarAcceso(app,db,person);
+      const respuesta=await fetch('/api/recuperar',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+await auth.currentUser.getIdToken()},body:JSON.stringify({sede:dependencia,person:person.id})});
+      const datos=await respuesta.json().catch(()=>({}));
+      if(!respuesta.ok||!datos.clave)throw Error(datos.error||'Recuperación disponible desde el portal de Vercel. Revisa tu sesión.');
+      const {usuario,clave}=datos;
       person.usuarioAcceso=usuario;
       if(!boton.isConnected)return;
       view.querySelector('.profile-head p strong').textContent=usuario;
       const panel=document.createElement('section');panel.className='card';
       panel.innerHTML='<h3>Nuevo acceso listo</h3><label>Mensaje privado para el joven<textarea readonly rows="8"></textarea></label><button type="button">Copiar mensaje</button>';
       const mensaje=panel.querySelector('textarea');
-      mensaje.value='Hola, '+person.nombre+'. Te compartimos tu nuevo acceso a Jóvenes Unen al Barrio.\n\n'+enlace('./')+'\nUsuario: '+usuario+'\nContraseña temporal: '+clave+'\n\nEntra con estos datos y elige tu contraseña personal.';
+      mensaje.value='Hola, '+person.nombre+'. Tu usuario sigue siendo el mismo. Te compartimos tu contraseña temporal para entrar a Jóvenes Unen al Barrio.\n\n'+enlace('./')+'\nUsuario: '+usuario+'\nContraseña temporal: '+clave+'\n\nEntra con estos datos y elige tu contraseña personal.';
       panel.querySelector('button').onclick=async()=>{try{await navigator.clipboard.writeText(mensaje.value);notice('Mensaje copiado para enviar en privado.')}catch{mensaje.focus();mensaje.select();notice('Selecciona Copiar para guardar el mensaje.')}};
       boton.closest('.profile-controls').after(panel);
       boton.hidden=true;panel.scrollIntoView({block:'center'});mensaje.focus();

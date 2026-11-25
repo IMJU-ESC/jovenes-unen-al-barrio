@@ -58,32 +58,6 @@ export async function cambiarEstado(db,p,enabled,changes={},mes=''){
     tx.update(profileRef,{...changes,activo:enabled,bajaPorFaltas:false});
   });
 }
-export async function renovarAcceso(app,db,persona){
-  const scope=espacio(db);
-  const cuentas=await getDocsFromServer(query(collection(scope,'accesos'),where('participante','==',persona.id)));
-  const activas=cuentas.docs.filter(c=>c.data().activo);
-  if(activas.length!==1)throw Error('El expediente debe tener un acceso activo. Revisa la vinculación en Accesos.');
-  const usuario='joven.'+crypto.randomUUID().slice(0,8);
-  const clave=Array.from(crypto.getRandomValues(new Uint8Array(12)),b=>b.toString(16).padStart(2,'0')).join('');
-  const secundaria=initializeApp(app.options,'recuperacion-'+crypto.randomUUID());
-  try{
-    const auth=initializeAuth(secundaria,{persistence:inMemoryPersistence});
-    const cuenta=await createUserWithEmailAndPassword(auth,usuario+dominioUsuario,clave);
-    const expediente=doc(scope,'participantes',persona.id);
-    const anterior=activas[0].ref;
-    const nueva=doc(scope,'accesos',cuenta.user.uid);
-    await runTransaction(db,async tx=>{
-      const [perfil,previa,destino]=await Promise.all([tx.get(expediente),tx.get(anterior),tx.get(nueva)]);
-      if(!perfil.data()?.activo||!previa.data()?.activo||previa.data().participante!==persona.id||destino.exists()){
-        throw Error('El acceso cambió. Abre de nuevo el perfil antes de continuar.');
-      }
-      tx.update(anterior,{activo:false,suspendidoPorPadron:false});
-      tx.set(nueva,{activo:true,listo:false,participante:persona.id});
-      tx.update(expediente,{usuarioAcceso:usuario});
-    });
-    return {usuario,clave};
-  }finally{await deleteApp(secundaria)}
-}
 export function manageRoster(root,{app,db,people,reload,onError,editOnly=false,createOnly=false}) {
   if(!createOnly){
     const edit=section(root,'Actualizar datos de un participante');
