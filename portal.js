@@ -2,7 +2,7 @@ import {prefijoQR} from './dependencias.js';
 import {espacio,dependencia,nombreDependencia,dominioUsuario,enlace} from './dependencias.js';
 import {acumularHoras,mostrarAvance} from './avance-horas.js';
 import {browserLocalPersistence,browserSessionPersistence,collection,doc,getDoc,getDocs,getDocsFromServer,indexedDBLocalPersistence,initializeApp,initializeAuth,initializeFirestore,onAuthStateChanged,query,runTransaction,setDoc,signInWithEmailAndPassword,signOut,updateDoc,updatePassword,where} from './firebase-sdk-11.10.0.js';
-import {icon,navigation} from './navegacion.js?v=logos1';
+import {icon,navigation} from './navegacion.js?v=movil2';
 import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js?v=logos1';
 import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=sedes1';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=sedes1';
@@ -85,7 +85,7 @@ const states='<option value="presente">Presente</option><option value="justifica
 const labelState=s=>({presente:'Presente',falta:'Falta injustificada',justificada:'Falta justificada',no_aplica:'No aplica'})[s]||s;
 const initials=s=>s.trim().split(/\s+/).slice(0,2).map(n=>n[0]).join('');
 const fullDate=d=>new Date(d+'T12:00:00').toLocaleDateString('es-MX',{day:'numeric',month:'long'});
-function avatar(p){return p.foto?'<img class="avatar" src="'+escape(p.foto)+'" alt="">':'<span class="avatar fallback">'+escape(initials(p.nombre))+'</span>'}
+function avatar(p){return p.foto?'<img class="avatar" loading="lazy" decoding="async" src="'+escape(p.foto)+'" alt="">':'<span class="avatar fallback">'+escape(initials(p.nombre))+'</span>'}
 function guard(){return !dirty||window.confirm('¿Salir y descartar los cambios pendientes?')}
 function navigate(next){
   if(next===page){const menu=content.querySelector('.nav-more');if(menu)menu.open=false;return}
@@ -161,7 +161,7 @@ function dashboard(view,admin,monthly){
   view.innerHTML=hero+actions+'<div class="overview"><section class="card totals"><h3>Balance del mes</h3><div class="metrics">'+metrics+'</div><p class="absence">Faltas · '+absences+'</p></section><section class="card"><h3>Próximas actividades</h3>'+(upcoming.length?agendaList(upcoming.slice(0,3)):'<p class="empty">Sin actividades pendientes en el mes seleccionado.</p>')+'<button class="text-button" data-open="agenda">Ver calendario completo '+icon('flecha')+'</button></section></div>';
   if(!admin && monthly.length){
     const recientes=monthly.filter(a=>a.fecha<=stamp()).slice(-3).reverse();
-    if(recientes.length)view.insertAdjacentHTML('afterbegin','<section class="card"><h3>Mi asistencia reciente</h3>'+agendaList(recientes)+'<button class="text-button" data-open="agenda">Ver todas mis actividades</button></section>');
+    if(recientes.length)view.insertAdjacentHTML('beforeend','<section class="card"><h3>Mi asistencia reciente</h3>'+agendaList(recientes)+'<button class="text-button" data-open="agenda">Ver todas mis actividades</button></section>');
   }
   view.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>{navigate(b.dataset.open);if(b.dataset.open==='horas'&&admin)openManual()});
 }

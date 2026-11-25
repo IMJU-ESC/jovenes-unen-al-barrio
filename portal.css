@@ -132,3 +132,23 @@ body[data-marca] .task-hero button{background:white;color:var(--marca);box-shado
 body[data-marca] .gafete-panel{background:var(--suave);border-color:var(--line)}
 body[data-marca] .desk .rail button[aria-current],body[data-marca] .desk .dock [aria-current=page],body[data-marca] .task-grid button .task-icon{background:var(--suave);color:var(--marca)}
 body[data-marca] .rail-brand img{width:70px;height:48px;object-fit:contain}
+
+#login nav[aria-label="Elegir dependencia"]{display:flex;gap:4px;padding:4px;background:#efedea;border-radius:14px;margin-bottom:12px}
+#login nav a{flex:1;display:grid;place-items:center;text-align:center;text-decoration:none;color:#48424a;font-size:.85rem;line-height:1.2;min-height:44px;border-radius:10px}
+body:not([data-marca]) #login nav a:first-child,body[data-marca=mujer] #login nav a:nth-child(2),body[data-marca=atencion-ciudadana] #login nav a:last-child{background:white;color:var(--wine);font-weight:750;box-shadow:0 1px 4px #28152522}
+@media(max-width:760px){
+ #login .intro,body[data-marca] #login .intro{background:linear-gradient(125deg,var(--marca,#392843),var(--wine));min-height:0;padding:18px 20px;border-radius:20px}
+ #login .intro h1{margin:5px 0;font-size:clamp(26px,7vw,36px);line-height:1.08}
+ #login .intro h1 br{display:none}
+ #login .intro h1 em::before{content:" "}
+ #login .intro .lead{max-width:40ch;line-height:1.35}
+ #account input,#login input,#account select,#account textarea{font-size:16px}
+ .desk .task-hero{display:block;min-height:0;padding:20px;background:var(--marca,#392843)}
+ .task-hero>img,.task-hero::after{display:none}
+ .task-hero button{min-height:48px}
+ .desk .task-grid{display:grid;grid-template-columns:1fr;gap:6px}
+ .desk .task-grid button{display:flex;align-items:center;gap:12px;text-align:left;min-height:48px;padding:7px 12px}
+ .task-grid button>.ui-icon:last-child{margin-left:auto}
+ .directory-person{content-visibility:auto;contain-intrinsic-size:auto 130px}
+ .desk .dock{padding-inline:max(5px,env(safe-area-inset-left))}
+}

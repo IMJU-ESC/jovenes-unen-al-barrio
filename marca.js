@@ -10,8 +10,8 @@ if(marca){
   body.style.setProperty('--marca',marca.principal);
   body.style.setProperty('--acento',marca.acento);
   body.style.setProperty('--suave',marca.fondo);
-  const logo=document.querySelector('header img[src="./imju.webp"]');
-  if(logo){logo.src='./'+marca.archivo+'.webp';logo.alt=marca.nombre}
+  const logo=document.querySelector('header img[src="./imju-mini.webp"]');
+  if(logo){logo.src='./'+marca.archivo+'-mini.webp';logo.alt=marca.nombre}
   const tema=document.querySelector('meta[name="theme-color"]');
   if(tema)tema.content=marca.principal;
 }
