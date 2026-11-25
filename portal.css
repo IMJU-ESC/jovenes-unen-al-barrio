@@ -251,3 +251,26 @@ body:not([data-marca]) #login nav a:first-child,body[data-marca=mujer] #login na
 }
 
 .mesa-entrada .revision-cola{display:none}
+
+/* Paisaje de barrio y señales de acción del programa. */
+@media screen {
+ body{--sol:var(--acento,#e6d897)}
+ .workspace .task-hero{position:relative;isolation:isolate}
+ .task-hero>.ilustracion-barrio{align-self:stretch;padding:12px 18px 0;display:flex;align-items:flex-end;justify-content:center;color:#fff5e4;background:linear-gradient(130deg,transparent,#ffffff16);overflow:hidden}
+ .ilustracion-barrio svg{width:100%;max-width:340px;height:auto}
+ .view-head #viewTitle{display:flex;align-items:center;gap:.32em}
+ #viewTitle .ui-icon{width:.85em;height:.85em;padding:.16em;box-sizing:content-box;background:var(--suave,#eee6f0);color:var(--brand);border-radius:32%}
+ :is(.scan-station,.agenda-menu,.gafete-actions,#sessionTools .quick) button:has(.ui-icon),.scan-station .cola{display:inline-flex;align-items:center;justify-content:center;gap:8px}
+ .scan-station .cola{border-radius:30px;padding:6px 11px;background:#e1f3e9;color:#165839;font-weight:650;font-size:.88rem}
+ .scan-station .cola[data-pendiente=true]{background:#fff1cc;color:#684601}
+ .scan-station .cola .ui-icon{width:17px;height:17px}
+ .desk nav button[aria-current=page] .ui-icon{stroke-width:2.25}
+ .roster-tabs [aria-pressed=true]{box-shadow:inset 0 -3px 0 var(--sol)}
+ .agenda-eventos .event time{border-top:4px solid var(--brand);font-variant-numeric:tabular-nums}
+ @media(max-width:760px){
+  .workspace .task-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(64px,23%)}
+  .task-hero>.ilustracion-barrio{padding:0 5px 12px 0;background:none}
+  .task-hero>div:first-child{padding-right:0}
+ }
+ @media(max-width:360px){.workspace .task-hero{display:block}.task-hero>.ilustracion-barrio{display:none}}
+}

@@ -2,7 +2,7 @@ import {prefijoQR} from './dependencias.js';
 import {espacio,dependencia,nombreDependencia,dominioUsuario,enlace} from './dependencias.js';
 import {acumularHoras,mostrarAvance} from './avance-horas.js?v=horas4';
 import {browserLocalPersistence,browserSessionPersistence,collection,doc,getDoc,getDocs,getDocsFromServer,indexedDBLocalPersistence,initializeApp,initializeAuth,initializeFirestore,onAuthStateChanged,query,runTransaction,setDoc,signInWithEmailAndPassword,signOut,updateDoc,updatePassword,where} from './firebase-sdk-11.10.0.js';
-import {icon,navigation} from './navegacion.js?v=movil2';
+import {icon,navigation} from './navegacion.js?v=barrio13';
 import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js?v=logos1';
 import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=puesto12';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=sedes1';
@@ -112,7 +112,7 @@ function draw(admin){
   if(!(page in pages))page='inicio';
   const monthly=activities.filter(a=>a.fecha?.startsWith(selectedMonth));
   const monthControl=['cuenta','gafete'].includes(page)?'':'<label class="month">Mes de consulta<input id="month" type="month" value="'+escape(selectedMonth)+'"></label>';
-  content.innerHTML='<div class="desk">'+navigation(pages,page,admin)+'<section class="workspace"><div class="view-head"><div><p class="kicker">'+(admin?'Coordinación · '+escape(nombreDependencia)+'':'Mi participación · '+escape(nombreDependencia)+'')+'</p><h2 id="viewTitle" tabindex="-1">'+pages[page]+'</h2></div>'+monthControl+'</div><div id="view"></div></section></div>';
+  content.innerHTML='<div class="desk">'+navigation(pages,page,admin)+'<section class="workspace"><div class="view-head"><div><p class="kicker">'+(admin?'Coordinación · '+escape(nombreDependencia)+'':'Mi participación · '+escape(nombreDependencia)+'')+'</p><h2 id="viewTitle" tabindex="-1">'+icon(page)+escape(pages[page])+'</h2></div>'+monthControl+'</div><div id="view"></div></section></div>';
   content.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
   if(el('month'))el('month').onchange=e=>{
     const value=e.target.value;
@@ -157,7 +157,7 @@ function dashboard(view,admin,monthly){
   const shortcuts=admin?[['lista','Pasar lista'],['padron','Buscar joven'],['horas','Sumar horas']]:[['horas','Ver mis horas'],['agenda','Ver calendario']];
   const activity=sum(records.filter(r=>r.categoria==='actividad')),learning=sum(records.filter(r=>r.categoria==='aprendizaje'));
   const upcoming=monthly.filter(a=>a.fecha>=stamp());
-  const hero='<section class="task-hero"><div><h3>'+escape(admin?'Registro de asistencia':people[0]?.nombre||'Mi participación')+'</h3><p>'+(admin?'Escanea el gafete de cada joven al llegar a la actividad.':'Ten tu credencial a la mano para registrar tu asistencia.')+'</p><button data-open="'+mainTask+'">'+icon(mainTask)+(admin?'Escanear gafete':'Mostrar mi gafete')+'</button></div><img src="./patio.webp" alt=""></section>';
+  const hero='<section class="task-hero"><div><h3>'+escape(admin?'Registro de asistencia':people[0]?.nombre||'Mi participación')+'</h3><p>'+(admin?'Escanea el gafete de cada joven al llegar a la actividad.':'Ten tu credencial a la mano para registrar tu asistencia.')+'</p><button data-open="'+mainTask+'">'+icon(mainTask)+(admin?'Escanear gafete':'Mostrar mi gafete')+'</button></div><div class="ilustracion-barrio" aria-hidden="true"><svg viewBox="0 0 240 120" fill="none"><circle cx="177" cy="34" r="25" fill="var(--sol)"/><g stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M4 95 38 69l32 26 40-38 44 38 29-19 48 19M24 97V72l19-14 19 14v25m-25 0V82h12v15M90 95V50h30v45m-22-36h5m6 0h5m-16 9h5m6 0h5M146 95V66l16-12 16 12v29m-18-14h8M198 95V71l11-8 13 8v24"/><path d="M0 104q20-8 40 0t40 0t40 0t40 0t40 0t40 0M0 113q20-8 40 0t40 0t40 0t40 0t40 0t40 0"/></g></svg></div></section>';
   const actions='<div class="task-grid">'+shortcuts.map(([id,label])=>'<button data-open="'+id+'"><span class="task-icon">'+icon(id)+'</span>'+label+icon('flecha')+'</button>').join('')+'</div>';
   const metrics=(admin?metric(people.filter(p=>p.activo).length,'Jóvenes activos'):'')+metric(sum(records)+' h','Horas acreditadas')+metric(activity+' h','Actividad')+metric(learning+' h','Aprendizaje');
   const absences=records.filter(r=>r.estado==='falta').length+' injustificadas · '+records.filter(r=>r.estado==='justificada').length+' justificadas';
@@ -202,7 +202,7 @@ function agendaList(list){
   return list.length?list.map(a=>'<article class="event"><time datetime="'+escape(a.fecha)+'"><b>'+escape(a.fecha.slice(8))+'</b>'+escape(new Date(a.fecha+'T12:00:00').toLocaleString('es-MX',{month:'short'}))+'</time><div><strong>'+escape(a.titulo)+'</strong><div class="estado-linea">'+estadoAgenda(a)+'</div><p>'+escape([a.hora,a.lugar,a.categoria,a.horas+' h'].filter(Boolean).join(' · '))+'</p>'+(a.descripcion?'<p>'+escape(a.descripcion)+'</p>':'')+'</div></article>').join(''):'<p class="empty">Sin actividades programadas en este mes.</p>';
 }
 function badge(view,p,showFields=true){
-  view.innerHTML='<section class="gafete-panel"><div class="gafete-preview" aria-live="polite">Preparando la credencial…</div><div class="gafete-actions"><h3>Credencial individual</h3><p>Gafete de 8.5 × 11.5 cm con vigencia de octubre de 2026 a octubre de 2027. Coloca el sello sobre el borde de la foto, dejando visible el rostro. Imprime el PDF en hoja carta al 100 % y recorta por las marcas.</p><button class="pdf" disabled>Descargar PDF para imprimir</button><button class="png light" disabled>Guardar imagen para celular</button><a class="action-link" hidden download="QR-IMJU.gif">Descargar solo el QR</a></div></section>'+(showFields?'<section class="card"><h3>Mi expediente</h3>'+personFields(p)+'</section>':'');
+  view.innerHTML='<section class="gafete-panel"><div class="gafete-preview" aria-live="polite">Preparando la credencial…</div><div class="gafete-actions"><h3>Credencial individual</h3><p>Gafete de 8.5 × 11.5 cm con vigencia de octubre de 2026 a octubre de 2027. Coloca el sello sobre el borde de la foto, dejando visible el rostro. Imprime el PDF en hoja carta al 100 % y recorta por las marcas.</p><button class="pdf" disabled>'+icon('descargar')+'Descargar PDF para imprimir</button><button class="png light" disabled>'+icon('foto')+'Guardar imagen para celular</button><a class="action-link" hidden download="QR-IMJU.gif">Descargar solo el QR</a></div></section>'+(showFields?'<section class="card"><h3>Mi expediente</h3>'+personFields(p)+'</section>':'');
   const preview=view.querySelector('.gafete-preview'),pdf=view.querySelector('.pdf'),png=view.querySelector('.png');
   cargarQR('qrcode').then(()=>{
     const url=badgeQR(p),link=view.querySelector('a[download]');
@@ -448,7 +448,7 @@ function albumActividad(a,fotos){
   return album;
 }
 function calendar(view,monthly,admin,reload){
-  view.innerHTML='<div class="agenda-menu" role="group" aria-label="Vista de actividades"><button type="button" aria-pressed="true">Actividades</button><button type="button" aria-pressed="false">Evidencias</button></div><div class="agenda-eventos"></div><section class="agenda-albumes" hidden><h3>Evidencias del mes</h3></section>';
+  view.innerHTML='<div class="agenda-menu" role="group" aria-label="Vista de actividades"><button type="button" aria-pressed="true">'+icon('agenda')+'Actividades</button><button type="button" aria-pressed="false">'+icon('foto')+'Evidencias</button></div><div class="agenda-eventos"></div><section class="agenda-albumes" hidden><h3>Evidencias del mes</h3></section>';
   const eventos=view.querySelector('.agenda-eventos'),albumes=view.querySelector('.agenda-albumes');
   const botones=[...view.querySelectorAll('.agenda-menu button')];
   let preparado=false;
@@ -660,18 +660,20 @@ async function sincronizarEscaneos(){
 window.addEventListener('online',()=>sincronizarEscaneos().catch(report));
 setInterval(()=>{if(!document.hidden)sincronizarEscaneos().catch(report)},30000);
 function scannerTools(root,a,reload){
-  root.insertAdjacentHTML('beforeend','<video id="video" muted playsinline hidden></video><div class="quick"><button id="scan">Activar cámara</button><button class="light" id="stop" hidden>Detener cámara</button><label class="action-link">Leer imagen del QR<input class="file-picker" id="qrFile" type="file" accept="image/*"></label></div><p id="scanResult" role="status"></p>');
+  root.insertAdjacentHTML('beforeend','<video id="video" muted playsinline hidden></video><div class="quick"><button id="scan">'+icon('camara')+'Activar cámara</button><button class="light" id="stop" hidden>'+icon('pausa')+'Detener cámara</button><label class="action-link">Leer imagen del QR<input class="file-picker" id="qrFile" type="file" accept="image/*"></label></div><p id="scanResult" role="status"></p>');
   const video=el('video'),start=el('scan'),stop=el('stop'),file=el('qrFile'),result=el('scanResult');
   result.textContent='Escanea el gafete y confirma la identidad.';
   const barra=document.createElement('div');barra.className='scan-station';
-  barra.innerHTML='<button type="button" class="station-open">Recepción en PC</button><button type="button" class="light sincronizar">Sincronizar</button><span class="cola" role="status"></span>';
+  barra.innerHTML='<button type="button" class="station-open">'+icon('pc')+'Recepción en PC</button><button type="button" class="light sincronizar">'+icon('sincronizar')+'Sincronizar</button><span class="cola" role="status"></span>';
   root.prepend(barra);
   const revisionCola=document.createElement('details');revisionCola.className='revision-cola';
   revisionCola.innerHTML='<summary>Ver registros pendientes</summary><div></div>';
   barra.after(revisionCola);
   const estadoCola=()=>{
     const keys=pendientesLocales(),lista=revisionCola.querySelector('div');lista.replaceChildren();
-    barra.querySelector('.cola').textContent=(navigator.onLine?'':'Sin conexión · ')+keys.length+' pendientes de subir';
+    const cola=barra.querySelector('.cola');
+    cola.dataset.pendiente=String(keys.length>0||!navigator.onLine);
+    cola.innerHTML=icon(keys.length||!navigator.onLine?'horas':'listo')+'<span>'+(navigator.onLine?'':'Sin conexión · ')+(keys.length?keys.length+' pendientes de subir':'Sin pendientes de subir')+'</span>';
     revisionCola.hidden=!keys.length;
     for(const key of keys){
       const item=JSON.parse(localStorage.getItem(key));if(!item)continue;
@@ -706,9 +708,10 @@ function scannerTools(root,a,reload){
     if(!root.closest('.mesa-entrada'))pendingAttendance(root,a,reload);
   };
   window.addEventListener('jub-sync',actualizar);
+  window.addEventListener('online',estadoCola);window.addEventListener('offline',estadoCola);
   const limpiar=new MutationObserver(()=>{
     if(root.isConnected)return;
-    window.removeEventListener('jub-sync',actualizar);limpiar.disconnect();
+    window.removeEventListener('jub-sync',actualizar);window.removeEventListener('online',estadoCola);window.removeEventListener('offline',estadoCola);limpiar.disconnect();
   });
   limpiar.observe(document.body,{childList:true,subtree:true});
   cargarQR('jsQR').then(()=>{if(result.isConnected&&!lastScan&&!stream)result.textContent='Escáner listo. Puedes seguir en esta pantalla si pierdes señal.'}).catch(()=>{if(result.isConnected)result.textContent='Activa la cámara con conexión para preparar el lector QR.'});

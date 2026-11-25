@@ -9,6 +9,13 @@ const paths = {
   cuenta: 'M16 8a4 4 0 1 1-8 0 4 4 0 1 1 8 0M4 21v-2a8 8 0 0 1 16 0v2',
   gafete: 'M3 5h18v14H3zm4 5h3m-3 4h4m3-4h4m-4 4h4',
   mas: 'M3 6h18M3 12h18M3 18h18',
+  camara:'M3 7h4l2-3h6l2 3h4v13H3z M15.5 13a3.5 3.5 0 1 1-7 0 3.5 3.5 0 0 1 7 0',
+  foto:'M3 4h18v16H3z M4 17l5-6 4 4 3-3 5 5 M16 8h.01',
+  pc:'M2 4h20v13H2z M12 17v4m-5 0h10',
+  sincronizar:'M4 10a8 8 0 0 1 14-4l2 2m0-5v5h-5 M20 14a8 8 0 0 1-14 4l-2-2m0 5v-5h5',
+  listo:'M21 12a9 9 0 1 1-5-8 M8 11l4 4 8-9',
+  pausa:'M4 4h16v16H4z M9 8v8m6-8v8',
+  descargar:'M12 3v12m-5-5 5 5 5-5 M4 16v5h16v-5',
   flecha: 'M5 12h14m-6-6 6 6-6 6'
 };
 
