@@ -1,7 +1,7 @@
 {
   "framework": null,
-  "installCommand": "",
-  "buildCommand": "mkdir -p public && cp ./*.html ./*.js ./*.css ./*.webp ./*.svg ./firebase-web.json ./portal.webmanifest ./firebase-sdk-LICENSE.txt ./jsQR-LICENSE public/",
+  "installCommand": "npm install --omit=dev",
+  "buildCommand": "node scripts/verificar-firebase.cjs && mkdir -p public && cp ./*.html ./*.js ./*.css ./*.webp ./*.svg ./firebase-web.json ./portal.webmanifest ./firebase-sdk-LICENSE.txt ./jsQR-LICENSE public/",
   "outputDirectory": "public",
   "headers": [
     {

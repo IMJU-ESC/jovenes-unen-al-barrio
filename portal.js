@@ -298,7 +298,7 @@ function horasDelPrograma(persona){
 function directory(view,reload){
   const person=people.find(p=>p.id===profileId);
   if(person){
-    view.innerHTML='<button class="light" id="backDirectory">← Volver al directorio</button><section class="profile-head">'+avatar(person)+'<div><h3>'+escape(person.nombre)+'</h3><p>Usuario · <strong>'+escape(person.usuarioAcceso||person.usuario)+'</strong></p></div></section><div class="quick profile-controls"><button id="profileEdit">Editar expediente</button><button class="light" id="profileAccess" '+(person.activo?'':'disabled')+'>Recuperar contraseña</button><button id="profileHours" '+(person.activo?'':'disabled')+'>Sumar horas</button><button class="light" data-task="qr">Escanear QR</button><button type="button" id="profileAttendance">Pasar lista individual</button></div><section id="perfilAsistencia" class="card"></section><section class="card"><h3>Datos del joven</h3>'+personFields(person)+'<p><strong>'+sum(records.filter(r=>r.person===person.id))+' h</strong> acreditadas en el mes seleccionado</p></section><div id="profileBadge"></div><section id="profileEditor" hidden></section>';
+    view.innerHTML='<button class="light" id="backDirectory">← Volver al directorio</button><section class="profile-head">'+avatar(person)+'<div><h3>'+escape(person.nombre)+'</h3><p>Usuario · <strong>'+escape(person.usuarioAcceso||person.usuario)+'</strong></p></div></section><div class="quick profile-controls"><button id="profileEdit">Editar expediente</button><button class="light" id="profileAccess" '+(person.activo?'':'disabled')+'>Generar contraseña temporal</button><button id="profileHours" '+(person.activo?'':'disabled')+'>Sumar horas</button><button class="light" data-task="qr">Escanear QR</button><button type="button" id="profileAttendance">Pasar lista individual</button></div><section id="perfilAsistencia" class="card"></section><section class="card"><h3>Datos del joven</h3>'+personFields(person)+'<p><strong>'+sum(records.filter(r=>r.person===person.id))+' h</strong> acreditadas en el mes seleccionado</p></section><div id="profileBadge"></div><section id="profileEditor" hidden></section>';
     const mes=selectedMonth;
     const periodo=new Date(mes+'-15T12:00:00').toLocaleString('es-MX',{month:'long',year:'numeric'});
     el('perfilAsistencia').insertAdjacentHTML('beforebegin','<section class="card"><h3>Faltas de '+escape(periodo)+'</h3>'+avisoFaltas(person,mes)+(person.activo&&(person.faltasPorMes?.[mes]||0)>=limiteFaltas?' <button id="bajaMensual">Dar de baja por faltas</button>':'')+'</section>');
@@ -330,54 +330,24 @@ function directory(view,reload){
       editor.hidden=false;editor.querySelector('details').open=true;editor.scrollIntoView({block:'center'});editor.querySelector('input[name=nombre]').focus();
       editor.oninput=()=>{dirty=true};
     };
-    el('profileAccess').onclick=e=>{
-      const usuario=person.usuarioAcceso||person.usuario;
-      const email=usuario+dominioUsuario;
+    el('profileAccess').onclick=e=>action(async()=>{
+      if(!confirm('¿Confirmaste la identidad de '+person.nombre+'? Recibirá una contraseña temporal para su usuario de siempre.'))return;
+      const boton=el('profileAccess');
+      const respuesta=await fetch('/api/recuperar',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+await auth.currentUser.getIdToken()},body:JSON.stringify({sede:dependencia,person:person.id})});
+      const datos=await respuesta.json().catch(()=>({}));
+      if(!respuesta.ok||!datos.clave)throw Error(datos.error||'Recuperación disponible desde el portal de Vercel. Revisa tu sesión.');
+      const {usuario,clave}=datos;
+      person.usuarioAcceso=usuario;
+      if(!boton.isConnected)return;
+      view.querySelector('.profile-head p strong').textContent=usuario;
       const panel=document.createElement('section');panel.className='card';
-      panel.innerHTML='<h3>Recuperar contraseña</h3><p>Confirma la identidad del joven. Abre Google con la cuenta que administra Firebase y pulsa <strong>Ejecutar</strong>. Copia el enlace que aparece junto a <strong>oobLink</strong>.</p><a class="action-link" target="_blank" rel="noopener noreferrer">Abrir Google para este usuario</a><label>Pega aquí el enlace de recuperación<input type="url" autocomplete="off"></label><button type="button">Preparar mensaje privado</button><textarea hidden readonly rows="7" aria-label="Mensaje para el joven"></textarea>';
-      const request={targetProjectId:app.options.projectId,resource:{requestType:'PASSWORD_RESET',email,returnOobLink:true}};
-      panel.querySelector('a').href='https://docs.cloud.google.com/identity-platform/docs/reference/rest/v1/projects.accounts/sendOobCode?hl=es&apix_params='+encodeURIComponent(JSON.stringify(request));
-      const boton=panel.querySelector('button'),entrada=panel.querySelector('input'),mensaje=panel.querySelector('textarea');
-      boton.onclick=()=>action(async()=>{
-        if(mensaje.hidden){
-          let url;try{url=new URL(entrada.value.trim())}catch{throw Error('Pega el enlace completo de oobLink.')}
-          const code=url.searchParams.get('oobCode');
-          if(url.origin!=='https://'+app.options.authDomain||url.pathname!=='/__/auth/action'||url.searchParams.get('mode')!=='resetPassword'||!code)throw Error('Revisa el enlace de Firebase.');
-          const respuesta=await fetch('https://identitytoolkit.googleapis.com/v1/accounts:resetPassword?key='+encodeURIComponent(app.options.apiKey),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({oobCode:code})});
-          const datos=await respuesta.json();
-          if(!respuesta.ok||datos.email?.toLowerCase()!==email.toLowerCase())throw Error('El enlace venció o corresponde a otra cuenta. Genera otro para este joven.');
-          mensaje.value='Hola, '+person.nombre+'. Abre este enlace privado para elegir tu contraseña: '+url.href+'\n\nDespués entra en '+enlace('./')+' con tu usuario '+usuario+'.';
-          mensaje.hidden=false;entrada.readOnly=true;boton.textContent='Copiar mensaje';
-        }
-        try{await navigator.clipboard.writeText(mensaje.value);notice('Mensaje copiado para enviar en privado.')}catch{mensaje.focus();mensaje.select();notice('Copia el mensaje seleccionado.')}
-      },boton);
-      const alterna=document.createElement('details');
-      const resumen=document.createElement('summary');resumen.textContent='Otras opciones de recuperación';
-      alterna.append(resumen,...Array.from(panel.childNodes));panel.append(alterna);
-      const cambio=document.createElement('form');
-      cambio.innerHTML='<h3>Cambiar contraseña de primer ingreso</h3><label>Clave temporal del mensaje anterior<input name="anterior" type="password" required autocomplete="off"></label><label>Nueva clave temporal (mínimo 12 caracteres)<input name="nueva" type="password" minlength="12" required autocomplete="new-password"></label><button>Guardar y preparar mensaje</button><p role="status"></p><textarea hidden readonly rows="7" aria-label="Mensaje privado"></textarea>';
-      panel.prepend(cambio);
-      cambio.onsubmit=evento=>{
-        evento.preventDefault();
-        const guardar=cambio.querySelector('button'),estado=cambio.querySelector('p'),salida=cambio.querySelector('textarea');
-        action(async()=>{
-          if(!salida.hidden){
-            try{await navigator.clipboard.writeText(salida.value);estado.textContent='Mensaje copiado.'}catch{salida.focus();salida.select();estado.textContent='Copia el texto seleccionado.'}
-            return;
-          }
-          const anterior=cambio.elements.anterior.value.trim(),nueva=cambio.elements.nueva.value;
-          if(nueva.trim()!==nueva||nueva===anterior){estado.textContent='Elige una clave distinta, sin espacios al inicio ni al final.';return}
-          try{await cambiarClaveDeAlta(app,db,person,anterior,nueva)}catch(err){
-            estado.textContent=['auth/wrong-password','auth/invalid-credential','auth/user-not-found'].includes(err.code)?'La clave de alta no coincide. Si vinculó un correo, el joven puede usar Olvidé mi contraseña.':err.message;return;
-          }
-          salida.value='Hola, '+person.nombre+'. Entra en '+enlace('./')+' con tu usuario '+usuario+' y esta nueva contraseña temporal: '+nueva+'. Al entrar, elige tu contraseña personal.';
-          salida.hidden=false;
-          for(const campo of cambio.querySelectorAll('input')){campo.value='';campo.disabled=true;campo.closest('label').hidden=true}
-          guardar.textContent='Copiar mensaje';estado.textContent='Clave actualizada.';
-        },guardar);
-      };
-      e.currentTarget.closest('.profile-controls').after(panel);e.currentTarget.hidden=true;panel.scrollIntoView({block:'center'});
-    };
+      panel.innerHTML='<h3>Nuevo acceso listo</h3><label>Mensaje privado para el joven<textarea readonly rows="8"></textarea></label><button type="button">Copiar mensaje</button>';
+      const mensaje=panel.querySelector('textarea');
+      mensaje.value='Hola, '+person.nombre+'. Tu usuario sigue siendo el mismo. Te compartimos tu contraseña temporal para entrar a Jóvenes Unen al Barrio.\n\n'+enlace('./')+'\nUsuario: '+usuario+'\nContraseña temporal: '+clave+'\n\nEntra con estos datos y elige tu contraseña personal.';
+      panel.querySelector('button').onclick=async()=>{try{await navigator.clipboard.writeText(mensaje.value);notice('Mensaje copiado para enviar en privado.')}catch{mensaje.focus();mensaje.select();notice('Selecciona Copiar para guardar el mensaje.')}};
+      boton.closest('.profile-controls').after(panel);
+      boton.hidden=true;panel.scrollIntoView({block:'center'});mensaje.focus();
+    },e.currentTarget);
     el('profileHours').onclick=()=>{navigate('horas');if(page==='horas')openManual(person.id)};
     view.querySelectorAll('[data-task]').forEach(b=>b.onclick=()=>navigate(b.dataset.task));
     el('backDirectory').onclick=()=>{if(!guard())return;dirty=false;profileId='';draw(true);el('findPerson').focus()};
