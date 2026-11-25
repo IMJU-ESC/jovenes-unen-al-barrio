@@ -4,7 +4,7 @@ import {acumularHoras,mostrarAvance} from './avance-horas.js?v=horas4';
 import {browserLocalPersistence,browserSessionPersistence,collection,doc,getDoc,getDocs,getDocsFromServer,indexedDBLocalPersistence,initializeApp,initializeAuth,initializeFirestore,onAuthStateChanged,query,runTransaction,setDoc,signInWithEmailAndPassword,signOut,updateDoc,updatePassword,where} from './firebase-sdk-11.10.0.js';
 import {icon,navigation} from './navegacion.js?v=movil2';
 import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js?v=logos1';
-import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=horas4';
+import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=puesto12';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=sedes1';
 import {manageRoster,cambiarEstado,cambiarClaveDeAlta} from './padron.js?v=alta10';
 
@@ -63,7 +63,9 @@ async function load(user){
  const [list,agenda]=await Promise.all([admin?getDocs(collection(espacio(db),'participantes')).then(snapshot):getDoc(doc(espacio(db),'participantes',access.participante)).then(d=>d.exists()?[{...d.data(),id:d.id}]:[]),getDocs(collection(espacio(db),'actividades')).then(snapshot)]);
  if(seq!==revision)return;
  if(admin){
-   const vencidas=agenda.filter(a=>!a.listaCerrada&&a.fecha<stamp()&&(a.cierreAutomatico||a.fecha>='2026-11-19')).sort((a,b)=>a.fecha.localeCompare(b.fecha));
+   await sincronizarEscaneos();
+   const locales=pendientesLocales();
+   const vencidas=agenda.filter(a=>!locales.some(k=>k.startsWith(colaPrefijo()+encodeURIComponent(a.id)+':'))&&!a.listaCerrada&&a.fecha<stamp()&&(a.cierreAutomatico||a.fecha>='2026-11-19')).sort((a,b)=>a.fecha.localeCompare(b.fecha));
    for(const a of vencidas){
      if(seq!==revision)return;
      await cerrarLista(a,list);a.listaCerrada=true;
@@ -520,6 +522,7 @@ function attendanceView(view,monthly,reload,scanner){
   if(!a.listaCerrada){
     const close=document.createElement('button');close.className='light';close.textContent='Cerrar lista';
     close.onclick=()=>action(async()=>{
+      if(pendientesLocales().some(k=>k.startsWith(colaPrefijo()+encodeURIComponent(a.id)+':')))throw Error('Sincroniza los escaneos pendientes antes de cerrar esta actividad.');
       if(!guard()||!confirm('¿Cerrar '+a.titulo+'? Cada participante activo pendiente recibirá una falta injustificada. Revisa primero a quién corresponde No aplica.'))return;
       await cerrarLista(a,people);await reload('Lista cerrada. Se registraron las faltas pendientes.');
     },close);
@@ -618,10 +621,97 @@ function pendingAttendance(root,a,reload){
 function attendanceRow(a,status,hours,note){
   return {titulo:a.titulo,fecha:a.fecha,categoria:a.categoria,estado:status,horas:status==='presente'?Number(hours):0,tipo:'actividad',nota:note};
 }
+function colaPrefijo(){
+  return 'jub:asistencia:1:'+dependencia+':'+auth.currentUser.uid+':';
+}
+function pendientesLocales(){
+  const prefijo=colaPrefijo();
+  return Object.keys(localStorage).filter(k=>k.startsWith(prefijo));
+}
+let sincronizando=false;
+async function sincronizarEscaneos(){
+  if(sincronizando||!navigator.onLine||!auth.currentUser||access?.participante!=='ADMIN')return;
+  sincronizando=true;
+  const uid=auth.currentUser.uid;
+  try{
+    for(const key of pendientesLocales()){
+      if(auth.currentUser?.uid!==uid)break;
+      const dato=JSON.parse(localStorage.getItem(key));
+      if(!dato)continue;
+      try{
+        const a=dato.actividad;
+        const next=attendanceRow(a,'presente',a.horas,'');
+        const [previo]=await saveRows(db,[{person:dato.person,id:a.id,prior:null,next}],a,true);
+        if(auth.currentUser?.uid!==uid)break;
+        localStorage.removeItem(key);
+        if(a.fecha.startsWith(selectedMonth)){
+          records=records.filter(r=>r.id!==a.id||r.person!==dato.person);
+          records.unshift({...(previo||next),id:a.id,person:dato.person});
+        }
+        window.dispatchEvent(new CustomEvent('jub-sync',{detail:{evento:a.id,person:dato.person,estado:previo?labelState(previo.estado):'Asistencia guardada'}}));
+      }catch(error){
+        const msg=['unavailable','deadline-exceeded'].includes(error.code)?'Esperando conexión':error.message;
+        window.dispatchEvent(new CustomEvent('jub-sync',{detail:{evento:dato.actividad.id,person:dato.person,estado:'Pendiente · '+msg}}));
+        if(!navigator.onLine||error.code==='unavailable')break;
+      }
+    }
+  }finally{sincronizando=false}
+}
+window.addEventListener('online',()=>sincronizarEscaneos().catch(report));
+setInterval(()=>{if(!document.hidden)sincronizarEscaneos().catch(report)},30000);
 function scannerTools(root,a,reload){
   root.insertAdjacentHTML('beforeend','<video id="video" muted playsinline hidden></video><div class="quick"><button id="scan">Activar cámara</button><button class="light" id="stop" hidden>Detener cámara</button><label class="action-link">Leer imagen del QR<input class="file-picker" id="qrFile" type="file" accept="image/*"></label></div><p id="scanResult" role="status"></p>');
   const video=el('video'),start=el('scan'),stop=el('stop'),file=el('qrFile'),result=el('scanResult');
-  result.textContent=lastScan||'Elige la cámara o una imagen del gafete. Se necesita conexión para guardar la asistencia.';
+  result.textContent='Escanea el gafete y confirma la identidad.';
+  const barra=document.createElement('div');barra.className='scan-station';
+  barra.innerHTML='<button type="button" class="station-open">Recepción en PC</button><button type="button" class="light sincronizar">Sincronizar</button><span class="cola" role="status"></span>';
+  root.prepend(barra);
+  const revisionCola=document.createElement('details');revisionCola.className='revision-cola';
+  revisionCola.innerHTML='<summary>Ver registros pendientes</summary><div></div>';
+  barra.after(revisionCola);
+  const estadoCola=()=>{
+    const keys=pendientesLocales(),lista=revisionCola.querySelector('div');lista.replaceChildren();
+    barra.querySelector('.cola').textContent=(navigator.onLine?'':'Sin conexión · ')+keys.length+' pendientes de subir';
+    revisionCola.hidden=!keys.length;
+    for(const key of keys){
+      const item=JSON.parse(localStorage.getItem(key));if(!item)continue;
+      const fila=document.createElement('p'),quitar=document.createElement('button');
+      const nombre=people.find(p=>p.id===item.person)?.nombre||'Participante';
+      fila.textContent=nombre+' · '+item.actividad.titulo+' ';
+      quitar.type='button';quitar.className='light';quitar.textContent='Descartar pendiente';
+      quitar.onclick=()=>{if(confirm('¿Descartar el registro local de '+nombre+' para '+item.actividad.titulo+'?')){localStorage.removeItem(key);estadoCola()}};
+      fila.append(quitar);lista.append(fila);
+    }
+  };
+  estadoCola();
+  barra.querySelector('.sincronizar').onclick=()=>action(sincronizarEscaneos);
+  const lector=document.createElement('form');lector.className='lector-usb';
+  lector.innerHTML='<label>Lector QR de escritorio<input autocomplete="off" maxlength="180" placeholder="Escanea con tu lector USB"></label><button>Revisar gafete</button>';
+  root.insertBefore(lector,result);
+  let leyendo=false;
+  lector.onsubmit=async e=>{e.preventDefault();if(leyendo)return;leyendo=true;const input=lector.querySelector('input'),code=input.value.trim();input.value='';try{if(code)await register(code)}finally{leyendo=false;input.focus()}};
+  barra.querySelector('.station-open').onclick=()=>{
+    const mesa=document.createElement('dialog');mesa.className='mesa-entrada';
+    mesa.innerHTML='<div class="mesa-head"><h2>Recepción de gafetes</h2><button type="button" class="light">Cerrar puesto y sesión</button></div><p></p>';
+    mesa.querySelector('p').textContent=a.titulo+' · '+fullDate(a.fecha);
+    document.body.append(mesa);mesa.append(root);mesa.showModal();lector.querySelector('input').focus();
+    const salir=()=>{stopCamera();action(async()=>{await signOut(auth);mesa.remove()})};
+    mesa.querySelector('.mesa-head button').onclick=salir;mesa.oncancel=e=>{e.preventDefault()};
+  };
+  const actualizar=e=>{
+    if(!root.isConnected||!auth.currentUser){window.removeEventListener('jub-sync',actualizar);return}
+    estadoCola();if(e.detail.evento!==a.id)return;
+    const persona=people.find(p=>p.id===e.detail.person);
+    result.textContent=(persona?.nombre||'Registro')+' · '+e.detail.estado;
+    if(!root.closest('.mesa-entrada'))pendingAttendance(root,a,reload);
+  };
+  window.addEventListener('jub-sync',actualizar);
+  const limpiar=new MutationObserver(()=>{
+    if(root.isConnected)return;
+    window.removeEventListener('jub-sync',actualizar);limpiar.disconnect();
+  });
+  limpiar.observe(document.body,{childList:true,subtree:true});
+  cargarQR('jsQR').then(()=>{if(result.isConnected&&!lastScan&&!stream)result.textContent='Escáner listo. Puedes seguir en esta pantalla si pierdes señal.'}).catch(()=>{if(result.isConnected)result.textContent='Activa la cámara con conexión para preparar el lector QR.'});
   if(lastScan)start.textContent='Escanear siguiente joven';
   function idle(){stopCamera();video.srcObject=null;video.hidden=true;stop.hidden=true;start.disabled=false;file.disabled=false}
   async function register(code){
@@ -632,14 +722,11 @@ function scannerTools(root,a,reload){
       const version=cameraVersion;
       const confirmed=await solicitar(root,'Confirmar asistencia',avatar(person)+'<h4>'+escape(person.nombre)+'</h4><p>Usuario · '+escape(person.usuario)+'</p><p>'+escape(a.titulo)+' · '+escape(fullDate(a.fecha))+' · '+escape(a.horas)+' h</p>','Confirmar asistencia',()=>true);
       if(!confirmed||!root.isConnected||version!==cameraVersion){result.textContent='Lectura cancelada.';return}
-      result.textContent='Registrando a '+person.nombre+'…';
-      const [prior]=await saveRows(db,[{person:person.id,id:a.id,prior:null,next:attendanceRow(a,'presente',a.horas,'')}],a,true);
-      if(!root.isConnected)return;
-      records=records.filter(r=>r.id!==a.id||r.person!==person.id);
-      records.unshift({...(prior||attendanceRow(a,'presente',a.horas,'')),id:a.id,person:person.id});
-      lastScan=person.nombre+' · '+(prior?'Registro existente: '+labelState(prior.estado)+' · '+prior.horas+' h.':'Asistencia guardada · '+a.horas+' h.')+' '+a.titulo;
-      result.textContent=lastScan;
-      pendingAttendance(root,a,reload);
+      const key=colaPrefijo()+encodeURIComponent(a.id)+':'+encodeURIComponent(person.id);
+      const actividad={id:a.id,fecha:a.fecha,titulo:a.titulo,horas:a.horas,categoria:a.categoria};
+      try{localStorage.setItem(key,JSON.stringify({actividad,person:person.id}))}catch{throw Error('No se guardó la asistencia. Revisa el espacio disponible en este dispositivo.')}
+      result.textContent=person.nombre+' · Guardado en este dispositivo. Pendiente de subir.';
+      estadoCola();await sincronizarEscaneos();
     }catch(e){result.textContent=e.message}
   }
   start.onclick=async()=>{
@@ -657,7 +744,7 @@ function scannerTools(root,a,reload){
       let previousCode='',lastSeen=0;
       async function tick(now){
         if(version!==cameraVersion)return;
-        if(!root.querySelector('dialog[open]')&&video.readyState>=2&&now-last>=200){
+        if(!document.hidden&&!root.querySelector('dialog[open]')&&video.readyState>=2&&now-last>=200){
           last=now;
           const scale=Math.min(1,800/Math.max(video.videoWidth,video.videoHeight));
           const w=Math.max(1,Math.round(video.videoWidth*scale)),h=Math.max(1,Math.round(video.videoHeight*scale));

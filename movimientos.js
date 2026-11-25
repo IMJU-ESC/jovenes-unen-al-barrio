@@ -39,6 +39,7 @@ export async function saveRows(db,changes,activity=null,scan=false){
     if(activity){
       const latest=(await tx.get(doc(espacio(db),'actividades',activity.id))).data();
       if(scan==='cierre'&&latest?.listaCerrada)return [];
+      if(scan===true&&latest?.listaCerrada)throw Error('Lista cerrada. Revisa la asistencia desde el perfil.');
       if(!latest||['fecha','horas','categoria','titulo'].some(k=>latest[k]!==activity[k]))throw Error('La actividad cambió. Actualiza el panel antes de registrar.');
     }
     const plans=await Promise.all(changes.map(async c=>{
