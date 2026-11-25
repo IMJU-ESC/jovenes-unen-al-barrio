@@ -162,3 +162,62 @@ body:not([data-marca]) #login nav a:first-child,body[data-marca=mujer] #login na
  #group .identidad-lista{grid-column:1/-1}
  #bulk>button:last-child{position:sticky;bottom:calc(72px + env(safe-area-inset-bottom));width:100%;min-height:46px;z-index:2}
 }
+
+/* Identidad del portal en pantalla. Los gafetes se generan por separado. */
+@media screen {
+ body {--brand:var(--marca,#583252);--wine:var(--brand);--ink:#242431;--muted:#585966;--line:#dedee5;--paper:#f6f5f7;color:var(--ink);background:var(--paper);font-family:"DM Sans",system-ui,sans-serif}
+ body[data-marca]{background:var(--paper)}
+ header{background:white;border-top:4px solid var(--brand);border-bottom-color:var(--line)}
+ main{max-width:1440px}
+ #login{max-width:1060px;margin-inline:auto;border:1px solid var(--line);border-radius:26px;box-shadow:0 12px 36px #3023360c}
+ #login .intro,body[data-marca] #login .intro{position:relative;isolation:isolate;background:var(--brand);overflow:hidden;justify-content:flex-end}
+ #login .intro::before{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(0deg,#171321f2 0%,#2415268a 65%,transparent),url(./patio.webp) center/cover}
+ #login .intro h1{font-size:clamp(2.7rem,5.4vw,5.4rem);font-weight:760;line-height:.97;letter-spacing:-.055em}
+ #login .intro h1 em{font-weight:500;color:#fff1cf}
+ #login .intro p:first-child,.kicker{font-size:.75rem;letter-spacing:.09em;text-transform:uppercase;font-weight:700}
+ #login form h2,.view-head h2{color:var(--ink);font-weight:740;letter-spacing:-.045em}
+ #login input,.workspace :is(input,select,textarea){border-radius:10px;border-color:#b4b2bd;min-width:0;color:var(--ink)}
+ #loginForm>button:not([type]),.task-hero button{min-height:48px;border-radius:12px;font-weight:700}
+ #loginForm>button:not([type]){width:100%;margin-inline:0}
+ .card,.workspace details:not(.nav-more),.directory-person,.decision{border-radius:18px;border-color:var(--line);box-shadow:0 3px 14px #241b3007}
+ .view-head{margin-bottom:14px}.view-head h2{line-height:1.06;text-wrap:balance}
+ .workspace .task-hero,body[data-marca] .task-hero{background:var(--brand);border:0;border-radius:22px}
+ .task-hero::after{display:none}
+ .task-hero h3{font-size:clamp(1.9rem,3.6vw,3.7rem);letter-spacing:-.045em;font-weight:710}
+ .workspace .task-hero button,body[data-marca] .task-hero button{background:#fff;color:var(--brand);box-shadow:none}
+ .task-grid button{border:1px solid var(--line);box-shadow:none}
+ .overview .metric,.overview .metric:nth-child(even){background:#f4f3f6;border-inline-start:3px solid var(--brand);border-radius:10px}
+ .overview .metric strong{color:var(--ink);letter-spacing:-.045em}
+ .session-target,.event time,.fallback{background:#f2edf2;color:var(--brand)}
+ .profile-head,.gafete-panel,body[data-marca] .gafete-panel{background:white;border:1px solid var(--line);padding:clamp(14px,2vw,26px);border-radius:20px}
+ .profile-head h3{font:700 clamp(1.45rem,3vw,2.3rem)/1.1 system-ui,sans-serif}
+ .people-grid,.task-grid{gap:12px}.directory-person{padding:16px}.directory-person strong{line-height:1.25}
+ .desk .rail,.desk .dock{background:white;border-color:var(--line)}
+ .desk .rail button[aria-current],.desk .dock button[aria-current]{color:var(--brand);background:#f3edf3}
+ .workspace button.light,#logout{background:#eeedf1;color:#353340}
+ :is(button,a,input,select,textarea,summary):focus-visible{outline:3px solid #086f91;outline-offset:3px}
+ @media(min-width:761px){
+  .desk{grid-template-columns:clamp(180px,17vw,236px) minmax(0,1fr);gap:clamp(16px,3vw,44px)}
+  .desk .rail{padding:12px;border-radius:18px}
+  .desk .rail-brand{border-bottom:1px solid var(--line);padding-bottom:16px;margin-bottom:6px}
+  .desk .rail-brand strong{font:720 1.05rem/1.1 system-ui,sans-serif}
+  #group .list-row{border:1px solid var(--line);border-radius:14px;padding:15px;margin-block:10px;grid-template-columns:repeat(4,minmax(0,1fr))}
+  #group .identidad-lista{grid-column:span 2}
+ }
+ @media(max-width:760px){
+  main{padding:12px}header{padding:8px 14px}
+  #login{grid-template-columns:minmax(0,1fr);border-radius:20px}
+  #login .intro,body[data-marca] #login .intro{border-radius:0;padding:20px;min-height:0}
+  #login .intro::before{background:radial-gradient(ellipse at 100% 0%,#ffffff24,transparent 68%)}
+  #login .intro h1{font-size:clamp(2rem,7vw,2.8rem);margin:8px 0}
+  #login .intro .lead{font-size:.9rem}
+  #login>div:nth-child(2){padding:12px}
+  .workspace .task-hero{padding:0}.task-hero>div{padding:20px}
+  .view-head{align-items:flex-start;flex-wrap:wrap;gap:6px}
+  .view-head h2{font-size:1.95rem;margin-bottom:2px}
+  #group .list-row{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+  #group .list-row label:has([name=note]),#group .justificante{grid-column:1/-1}
+  .desk .dock{box-shadow:0 -4px 18px #26213310}
+  #notice:not(:empty){bottom:calc(72px + env(safe-area-inset-bottom))}
+ }
+}
