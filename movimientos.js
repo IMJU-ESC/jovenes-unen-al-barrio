@@ -38,6 +38,8 @@ export async function saveRows(db,changes,activity=null,scan=false){
   return runTransaction(db,async tx=>{
     if(activity){
       const latest=(await tx.get(doc(espacio(db),'actividades',activity.id))).data();
+      if(!latest)throw Object.assign(Error('La actividad fue eliminada.'),{code:'actividad-eliminada'});
+      if(scan==='exenciones'&&Boolean(latest.listaCerrada)!==Boolean(activity.listaCerrada))throw Error('Cambió el estado de la lista. Actualiza la actividad.');
       if(scan==='cierre'&&latest?.listaCerrada)return [];
       if(scan===true&&latest?.listaCerrada)throw Error('Lista cerrada. Revisa la asistencia desde el perfil.');
       if(!latest||['fecha','horas','categoria','titulo'].some(k=>latest[k]!==activity[k]))throw Error('La actividad cambió. Actualiza el panel antes de registrar.');
@@ -48,7 +50,7 @@ export async function saveRows(db,changes,activity=null,scan=false){
       if(scan==='cierre'&&(!profile.exists()||!profile.data().activo||profile.data().muestra||profile.data().fechaAlta>activity.fecha))return {omitido:true};
       if(!profile.exists()||(!profile.data().activo&&!c.prior))throw Error('Participante inactivo o sin expediente.');
       const old=current.data();
-      if(scan&&old)return {existing:old};
+      if((scan===true||scan==='cierre')&&old)return {existing:old};
       if(key(old)!==key(c.prior))throw Error('Cambió un registro desde que abriste la lista. Actualiza y revisa antes de guardar.');
       if(c.next){
         const r=c.next;
@@ -62,7 +64,7 @@ export async function saveRows(db,changes,activity=null,scan=false){
     }));
     for(const p of plans){
       if(p.existing||p.omitido)continue;
-      if(p.next)tx.set(p.record,p.next,{merge:true});else tx.delete(p.record);
+      if(p.next)tx.set(p.record,p.next,{merge:scan!=='exenciones'});else tx.delete(p.record);
       tx.update(p.person,{...p.estado,revisionHoras:increment(1)});
     }
     return plans.map(p=>p.existing||null);

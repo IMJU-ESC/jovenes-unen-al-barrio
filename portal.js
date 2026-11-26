@@ -4,7 +4,7 @@ import {acumularHoras,mostrarAvance} from './avance-horas.js?v=horas4';
 import {browserLocalPersistence,browserSessionPersistence,collection,doc,getDoc,getDocs,getDocsFromServer,indexedDBLocalPersistence,initializeApp,initializeAuth,initializeFirestore,onAuthStateChanged,query,runTransaction,setDoc,signInWithEmailAndPassword,signOut,updateDoc,updatePassword,where} from './firebase-sdk-11.10.0.js';
 import {icon,navigation} from './navegacion.js?v=barrio13';
 import {cargarQR,decode,imageCanvas,renderBadge,saveBadge,badgeQR,saveRosterBadges} from './credencial.js?v=logos1';
-import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=puesto12';
+import {saveRows,prepararAsistencia,limiteFaltas} from './movimientos.js?v=eventos15';
 import {accountForms,awaitActivation,linkEmail,bindProfile} from './cuentas.js?v=acceso14';
 import {manageRoster,cambiarEstado,cambiarClaveDeAlta} from './padron.js?v=alta10';
 
@@ -435,6 +435,66 @@ function albumActividad(a,fotos){
   };
   return album;
 }
+function controlesDeEvento(item,a,reload){
+  const panel=document.createElement('details');
+  panel.innerHTML='<summary>¿A quién no le aplica?</summary><p>Marca a quienes están exentos. Si ya tenían falta, se descontará al guardar.</p><label>Buscar joven<input type="search" placeholder="Nombre o usuario"></label><div class="event-exemptions"></div><button type="button">Guardar selección</button>';
+  item.append(panel);
+  panel.addEventListener('toggle',()=>{
+    if(!panel.open||panel.dataset.ready)return;
+    panel.dataset.ready='1';
+    const list=panel.querySelector('.event-exemptions');
+    const entries=[];
+    for(const person of people.filter(p=>convocado(p,a))){
+      const prior=records.find(r=>r.person===person.id&&r.id===a.id&&r.tipo!=='manual');
+      const row=document.createElement('label'),box=document.createElement('input');
+      box.type='checkbox';box.checked=prior?.estado==='no_aplica';
+      row.style.cssText='display:flex;gap:.65rem;align-items:center;padding:.45rem 0';
+      box.style.width='auto';row.append(box,document.createTextNode(person.nombre+' · '+(prior?labelState(prior.estado):'Pendiente')));list.append(row);
+      entries.push({person,prior,box,row});
+    }
+    list.style.cssText='max-height:48vh;overflow:auto';
+    if(!entries.length)list.textContent='Sin jóvenes convocados para esta actividad.';
+    const normalizar=s=>String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+    panel.querySelector('[type=search]').oninput=e=>{for(const {person,row} of entries)row.style.display=normalizar(person.nombre+' '+person.usuario).includes(normalizar(e.target.value.trim()))?'flex':'none'};
+    const button=panel.querySelector('button');
+    button.onclick=()=>action(async()=>{
+      const changes=entries.filter(({prior,box})=>box.checked!==(prior?.estado==='no_aplica')).map(({person,prior,box})=>({
+        person:person.id,id:a.id,prior,next:box.checked?attendanceRow(a,'no_aplica',0,''):a.listaCerrada?attendanceRow(a,'falta',0,'Sin registro al cierre de la actividad.'):null
+      }));
+      if(!changes.length){notice('La selección ya está guardada.');return}
+      if(!confirm('¿Actualizar '+changes.length+' registro(s) de «'+a.titulo+'»? Marcar No aplica reemplaza la asistencia o falta anterior. Quitar la exención deja al joven '+(a.listaCerrada?'con falta porque la lista está cerrada.':'pendiente de registro.')))return;
+      await saveRows(db,changes,a,'exenciones');
+      await reload('Exenciones guardadas.');
+    },button);
+  });
+  const remove=document.createElement('button');remove.type='button';remove.className='light';remove.textContent='Eliminar actividad';item.append(remove);
+  remove.onclick=()=>action(async()=>{
+    if(!confirm('¿Eliminar definitivamente «'+a.titulo+'»? También se eliminarán sus evidencias, asistencias, horas y faltas.'))return;
+    const profiles=await getDocsFromServer(collection(espacio(db),'participantes'));
+    const event=doc(espacio(db),'actividades',a.id);
+    await runTransaction(db,async tx=>{
+      const current=await tx.get(event);
+      if(!current.exists())return;
+      if(current.data().titulo!==a.titulo)throw Error('La actividad cambió. Actualiza el panel.');
+      const rows=await Promise.all(profiles.docs.map(p=>tx.get(doc(p.ref,'registros',a.id))));
+      const affected=rows.filter(r=>r.exists()&&r.data().tipo!=='manual');
+      const owners=await Promise.all(affected.map(r=>tx.get(r.ref.parent.parent)));
+      affected.forEach((r,i)=>{
+        tx.delete(r.ref);
+        if(!owners[i].exists())return;
+        const profile=owners[i].data(),update={revisionHoras:(profile.revisionHoras||0)+1};
+        if(r.data().estado==='falta'&&profile.faltasPorMes){
+          const counts={...profile.faltasPorMes},month=r.data().fecha.slice(0,7);
+          if(counts[month]>1)counts[month]--;else delete counts[month];
+          update.faltasPorMes=counts;
+        }
+        tx.update(owners[i].ref,update);
+      });
+      tx.delete(event);
+    });
+    await reload('Actividad eliminada.');
+  },remove);
+}
 function calendar(view,monthly,admin,reload){
   view.innerHTML='<div class="agenda-menu" role="group" aria-label="Vista de actividades"><button type="button" aria-pressed="true">'+icon('agenda')+'Actividades</button><button type="button" aria-pressed="false">'+icon('foto')+'Evidencias</button></div><div class="agenda-eventos"></div><section class="agenda-albumes" hidden><h3>Evidencias del mes</h3></section>';
   const eventos=view.querySelector('.agenda-eventos'),albumes=view.querySelector('.agenda-albumes');
@@ -485,6 +545,7 @@ function calendar(view,monthly,admin,reload){
         if(Object.keys(updates).length)tx.update(ref,updates);
       });selectedMonth=data.fecha.slice(0,7);await reload('Actividad actualizada.');
     },f.querySelector('button'))};
+    controlesDeEvento(item,a,reload);
   }
   if(!monthly.length)eventos.insertAdjacentHTML('beforeend',agendaList([]));
 }
@@ -638,6 +699,7 @@ async function sincronizarEscaneos(){
         }
         window.dispatchEvent(new CustomEvent('jub-sync',{detail:{evento:a.id,person:dato.person,estado:previo?labelState(previo.estado):'Asistencia guardada'}}));
       }catch(error){
+        if(error.code==='actividad-eliminada'){localStorage.removeItem(key);continue}
         const msg=['unavailable','deadline-exceeded'].includes(error.code)?'Esperando conexión':error.message;
         window.dispatchEvent(new CustomEvent('jub-sync',{detail:{evento:dato.actividad.id,person:dato.person,estado:'Pendiente · '+msg}}));
         if(!navigator.onLine||error.code==='unavailable')break;
