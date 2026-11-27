@@ -1,8 +1,8 @@
 // Sólo recursos públicos del programa. Los datos de Firebase se consultan directamente.
 const scope=new URL(self.registration.scope);
 const prefix='imju-acceso-'+scope.pathname+'-';
-const cacheName=prefix+'eventos15';
-const paths=['index.html','portal.css?v=barrio13','portal.js?v=eventos15','firebase-sdk-11.10.0.js','firebase-web.json','credencial.js?v=logos1','avance-horas.js?v=horas4','dependencias.js','marca.js?v=movil2','immujer-mini.webp','atencion-ciudadana-mini.webp','imju-mini.webp','escudo-mini.webp','municipio-mini.webp','sspc-mini.webp','cuentas.js?v=acceso14','movimientos.js?v=eventos15','padron.js?v=alta10','navegacion.js?v=barrio13','qrcode.js','jsQR.js'];
+const cacheName=prefix+'aero16';
+const paths=['index.html','portal.css?v=aero16','portal.js?v=eventos15','firebase-sdk-11.10.0.js','firebase-web.json','credencial.js?v=logos1','avance-horas.js?v=horas4','dependencias.js','marca.js?v=movil2','immujer-mini.webp','atencion-ciudadana-mini.webp','imju-mini.webp','escudo-mini.webp','municipio-mini.webp','sspc-mini.webp','cuentas.js?v=acceso14','movimientos.js?v=eventos15','padron.js?v=alta10','navegacion.js?v=barrio13','qrcode.js','jsQR.js'];
 const allowed=new Set(paths.map(path=>new URL(path,scope).pathname));
 const index=new URL('index.html',scope).href;
 self.addEventListener('install',event=>{

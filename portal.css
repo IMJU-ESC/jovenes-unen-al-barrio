@@ -274,3 +274,94 @@ body:not([data-marca]) #login nav a:first-child,body[data-marca=mujer] #login na
  }
  @media(max-width:360px){.workspace .task-hero{display:block}.task-hero>.ilustracion-barrio{display:none}}
 }
+
+/* Frutiger Aero: paisaje costero, cristal y controles de la sede. */
+@media screen {
+  body {
+    --deep:#452641; --tone:#693853; --pearl:#f6d7b7; --sky:#acdfdf;
+    --water:#388c96; --hill:#849d63; --wash:#e8f3f1;
+    --rim:#bdcdcf; --aero-shadow:0 6px 20px #243c4612;
+  }
+  body[data-marca="mujer"] {
+    --deep:#691725; --tone:#951d32; --pearl:#ffda79; --sky:#a5e1df;
+    --water:#739e96; --hill:#a4a95b; --wash:#fff2dd; --rim:#d9c6ad;
+  }
+  body[data-marca="atencion-ciudadana"] {
+    --deep:#651936; --tone:#9d2550; --pearl:#ffc6bd; --sky:#bed8ef;
+    --water:#6395ae; --hill:#8aa896; --wash:#f9ebf0; --rim:#d7c3cd;
+  }
+  body,body[data-marca] {
+    background:radial-gradient(ellipse 75% 22rem at 100% 0,var(--sky),transparent),
+      linear-gradient(165deg,var(--wash),#f8fbfc 48rem);
+    min-height:100vh;
+  }
+  header,.desk .rail,.desk .dock,.scan-station {
+    backdrop-filter:none;
+    background:linear-gradient(180deg,white,#f5fafb 55%,var(--wash));
+    border:1px solid var(--rim);box-shadow:inset 0 1px white,var(--aero-shadow);
+  }
+  header{border-top:3px solid var(--tone)}
+  #login,.workspace .card,.directory-person,.decision,.workspace details:not(.nav-more),
+  .workspace .profile-head,.workspace .gafete-panel {
+    border-color:var(--rim);background:linear-gradient(150deg,#fff 68%,var(--wash));
+    box-shadow:inset 0 1px white,var(--aero-shadow);
+  }
+  #login .intro,body[data-marca] #login .intro,.workspace .task-hero,body[data-marca] .task-hero {
+    isolation:isolate;position:relative;overflow:hidden;color:white;background:var(--deep);
+  }
+  /* Las capas se escalan dentro de cada portada, incluso sin conexión. */
+  #login .intro::before,.workspace .task-hero::before {
+    content:"";position:absolute;inset:0;z-index:-1;pointer-events:none;
+    background:
+      linear-gradient(72deg,var(--deep) 5%,transparent 85%),
+      radial-gradient(ellipse 84% 28% at 90% 113%,var(--water) 93%,#c2eff2 95%,transparent 97%),
+      radial-gradient(ellipse 85% 40% at 125% 106%,var(--hill) 93%,#d1e8b3 95%,transparent 97%),
+      radial-gradient(ellipse 70% 30% at 64% 110%,var(--water) 94%,#b7e4dc 95%,transparent 97%),
+      radial-gradient(circle at 78% 23%,#fffff5 0 2%,var(--pearl) 3%,transparent 16%),
+      linear-gradient(155deg,var(--tone),var(--sky) 74%,#effcf7);
+  }
+  #login .intro::after,.workspace .task-hero::after {
+    content:"";display:block;position:absolute;pointer-events:none;z-index:-1;
+    width:clamp(68px,15vw,185px);height:auto;aspect-ratio:1;
+    inset:7% -3% auto auto;border-radius:50%;transform:none;opacity:.88;
+    border:1px solid #ffffffab;background:
+      radial-gradient(ellipse 30% 14% at 33% 18%,white,transparent 98%),
+      radial-gradient(circle at 42% 33%,transparent 42%,#d6fffe48 65%,#fff9 83%,transparent 86%);
+    box-shadow:inset -4px -5px 12px #ffffff84;
+  }
+  #login .intro h1,.task-hero h3 {text-shadow:0 2px 4px #27192578}
+  #login .intro p,.workspace .task-hero p {color:white;text-shadow:0 1px 3px #211927}
+  #login .intro h1 em{color:var(--pearl)}
+  .task-hero>.ilustracion-barrio{background:transparent;color:var(--deep);align-items:end}
+  .view-head,.mesa-head {
+    border:1px solid var(--rim);border-radius:20px;
+    background:linear-gradient(118deg,white 28%,var(--wash) 81%,var(--sky));box-shadow:inset 0 1px white;
+  }
+  .mesa-head{padding:12px}
+  .desk :is(.rail,.dock) button[aria-current=page],.agenda-menu button[aria-pressed=true],
+  #loginForm>button:not([type]),.workspace form button[type=submit]:not(.light) {
+    color:white;background:linear-gradient(180deg,var(--tone),var(--deep));
+    box-shadow:inset 0 1px 0 #ffffff6e,0 2px 4px #29172d20;
+  }
+  .task-grid button,.overview .metric,.overview .metric:nth-child(even),.session-target {
+    background:linear-gradient(150deg,white 45%,var(--wash));border:1px solid var(--rim);
+    box-shadow:inset 0 1px white,var(--aero-shadow);
+  }
+  .task-grid .task-icon,#viewTitle .ui-icon {
+    border-radius:35%;background:linear-gradient(170deg,white,var(--wash) 52%,var(--sky));
+    color:var(--deep);border:1px solid var(--rim);box-shadow:inset 0 2px white;
+  }
+  .overview .metric strong{color:var(--deep)}
+  .agenda-eventos .event time {background:linear-gradient(white,var(--wash));color:var(--deep);border-color:var(--tone)}
+  #group .list-row{border-color:var(--rim)}
+  .mesa-entrada{background:linear-gradient(145deg,var(--wash),white 60%)}
+  @media(max-width:760px){
+    #login .intro::before,.workspace .task-hero::before {background-size:100% 100%}
+    #login .intro p,#login .intro h1{max-width:80%}
+    .desk .dock{padding-bottom:max(5px,env(safe-area-inset-bottom))}
+  }
+  @media(prefers-reduced-motion:no-preference) and (hover:hover){
+    .task-grid button{transition:transform .15s ease,box-shadow .15s ease}
+    .task-grid button:hover{transform:translateY(-2px);box-shadow:0 5px 12px #243c4624}
+  }
+}
