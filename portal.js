@@ -46,8 +46,12 @@ function cerrarCambioClave(){
 }
 abrirClave.onclick=()=>{
   if(!auth.currentUser||!access?.listo)return;
+  const {actual,nueva}=claveForm.elements;
+  const coordinador=access.participante==='ADMIN';
+  actual.disabled=coordinador;
+  actual.closest('label').hidden=coordinador;
   claveDialogo.showModal();
-  claveForm.elements.actual.focus();
+  (coordinador?nueva:actual).focus();
 };
 el('cancelarClave').onclick=cerrarCambioClave;
 claveDialogo.onclose=()=>{claveForm.reset();el('claveEstado').textContent=''};
@@ -58,18 +62,22 @@ claveForm.onsubmit=async e=>{
   const estado=el('claveEstado'),user=auth.currentUser;
   if(guardar.disabled||!user?.email)return;
   if(nueva.value!==repetir.value){estado.textContent='Las contraseñas nuevas deben coincidir.';repetir.focus();return}
-  if(actual.value===nueva.value){estado.textContent='Elige una contraseña diferente de la actual.';nueva.focus();return}
+  if(access?.participante!=='ADMIN'&&actual.value===nueva.value){estado.textContent='Elige una contraseña diferente de la actual.';nueva.focus();return}
   guardar.disabled=el('cancelarClave').disabled=true;
   estado.textContent='Guardando tu contraseña…';
   const nuevaClave=nueva.value;
   try{
-    const sesion=await signInWithEmailAndPassword(auth,user.email,actual.value);
-    if(sesion.user.uid!==user.uid||auth.currentUser?.uid!==user.uid)throw Error();
-    await updatePassword(sesion.user,nuevaClave);
+    let titular=user;
+    if(access?.participante!=='ADMIN'){
+      const sesion=await signInWithEmailAndPassword(auth,user.email,actual.value);
+      titular=sesion.user;
+    }
+    if(titular.uid!==user.uid||auth.currentUser?.uid!==user.uid)throw Error();
+    await updatePassword(titular,nuevaClave);
     cerrarCambioClave();
     notice('Contraseña actualizada. En tu próximo ingreso usa tu mismo usuario y la nueva contraseña.');
   }catch(error){
-    const mensajes={'auth/invalid-credential':'Revisa tu contraseña actual.','auth/wrong-password':'Revisa tu contraseña actual.','auth/too-many-requests':'Hubo demasiados intentos. Espera antes de volver a probar.','auth/network-request-failed':'Revisa tu conexión y vuelve a intentar.','auth/weak-password':'Elige una contraseña más segura.','auth/password-does-not-meet-requirements':'Elige una contraseña más segura.'};
+    const mensajes={'auth/requires-recent-login':'Vuelve a iniciar sesión y abre Cambiar mi contraseña otra vez. Si olvidaste tu clave, usa Olvidé mi contraseña en la pantalla de ingreso.','auth/invalid-credential':'Revisa tu contraseña actual.','auth/wrong-password':'Revisa tu contraseña actual.','auth/too-many-requests':'Hubo demasiados intentos. Espera antes de volver a probar.','auth/network-request-failed':'Revisa tu conexión y vuelve a intentar.','auth/weak-password':'Elige una contraseña más segura.','auth/password-does-not-meet-requirements':'Elige una contraseña más segura.'};
     estado.textContent=mensajes[error.code]||'No se pudo confirmar el cambio. Vuelve a intentarlo.';
   }finally{guardar.disabled=el('cancelarClave').disabled=false}
 };
