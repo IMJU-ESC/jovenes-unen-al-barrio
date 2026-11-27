@@ -391,3 +391,20 @@ body:not([data-marca]) #login nav a:first-child,body[data-marca=mujer] #login na
  .mesa-entrada .decision [type=submit]{grid-row:1;font-size:1.2rem}
  @media(max-width:740px){.puesto-main{grid-template-columns:1fr}.puesto-icono{float:right;width:54px;height:54px}.puesto-icono svg{width:32px;height:32px}.puesto-guia h2{clear:both}.puesto-actividad{margin:0}}
 }
+
+@media screen{
+  .mesa-entrada .puesto-main{max-width:1400px;width:100%;grid-template-columns:minmax(240px,.76fr) minmax(0,1.24fr);align-items:start}
+  .puesto-pasos{padding-left:1.65em;font-size:clamp(1.1rem,1.65vw,1.45rem);line-height:1.45}
+  .puesto-pasos li{padding-left:.25em;margin-block:.75em}
+  .puesto-pasos li::marker{font-weight:750;color:var(--pearl)}
+  .puesto-visor{order:-5;border-radius:20px;background:#17242c;color:white;overflow:hidden}
+  .visor-etiqueta{display:flex;align-items:center;gap:.6em;padding:12px 18px;font-weight:650}
+  .mesa-entrada .puesto-visor #video{display:block;max-height:clamp(140px,36vh,360px);width:100%;object-fit:contain;margin:0;background:#101920}
+  .mesa-entrada #scanResult{order:-4;margin:0}
+  .mesa-entrada .lector-usb{order:1;margin:0}
+  .mesa-entrada #scan:disabled{display:none}
+  .mesa-entrada #sessionTools>.quick{display:flex;flex-wrap:wrap;gap:8px}
+  .mesa-entrada .decision .quick button{min-height:60px;font-weight:700}
+  @media(max-width:740px){.mesa-entrada .puesto-main{grid-template-columns:1fr}.puesto-pasos{margin-bottom:0}}
+  @media(min-width:741px) and (max-height:800px){.mesa-entrada .puesto-main{padding:14px 24px}.mesa-entrada #sessionTools{gap:7px}.mesa-entrada .lector-usb{padding:6px 12px}.mesa-entrada .puesto-visor #video{max-height:30vh}}
+}

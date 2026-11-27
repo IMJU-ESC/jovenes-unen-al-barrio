@@ -786,11 +786,25 @@ function scannerTools(root,a,reload){
   root.insertBefore(lector,result);
   let leyendo=false;
   lector.onsubmit=async e=>{e.preventDefault();if(leyendo)return;leyendo=true;const input=lector.querySelector('input'),code=input.value.trim();input.value='';try{if(code)await register(code)}finally{leyendo=false;input.focus()}};
+  let continuarCamara=false;
+  let indicador;
+  function estadoCamara(texto){
+    if(indicador)indicador.textContent=texto;
+  }
   barra.querySelector('.station-open').onclick=()=>{
     const mesa=document.createElement('dialog');mesa.className='mesa-entrada';
     mesa.setAttribute('aria-labelledby','puestoTitulo');
-    mesa.innerHTML='<header class="puesto-top"><strong>Recepción de asistencia</strong><button type="button" class="light">Cerrar puesto y sesión</button></header><main class="puesto-main"><section class="puesto-guia"><div class="puesto-icono" aria-hidden="true">'+icon('qr')+'</div><p class="puesto-actividad">'+escape(a.titulo)+' · '+escape(fullDate(a.fecha))+'</p><h2 id="puestoTitulo">Pasa tu credencial</h2><p>Acerca el código QR de tu gafete al lector. Cuando aparezca tu nombre, toca <strong>Confirmar mi asistencia</strong>.</p></section></main>';
+    mesa.innerHTML='<header class="puesto-top"><strong>Recepción de asistencia</strong><button type="button" class="light">Cerrar puesto y sesión</button></header><main class="puesto-main"><section class="puesto-guia"><div class="puesto-icono" aria-hidden="true">'+icon('qr')+'</div><p class="puesto-actividad">'+escape(a.titulo)+' · '+escape(fullDate(a.fecha))+'</p><h2 id="puestoTitulo">Muestra tu código QR</h2><ol class="puesto-pasos"><li>Coloca tu gafete frente a la cámara o pásalo por el lector.</li><li>Revisa tu nombre y toca <strong>Confirmar mi asistencia</strong>.</li></ol></section></main>';
     document.body.append(mesa);mesa.querySelector('main').append(root);mesa.showModal();
+    const marco=document.createElement('section');
+    marco.className='puesto-visor';
+    marco.innerHTML='<div class="visor-etiqueta">'+icon('camara')+'<span role="status"></span></div>';
+    root.insertBefore(marco,video);marco.append(video);
+    indicador=marco.querySelector('span');
+    continuarCamara=true;
+    if(stream)estadoCamara('Cámara encendida');
+    else if(!start.disabled)start.click();
+    else estadoCamara('Conectando cámara…');
     const input=lector.querySelector('input');
     input.placeholder='Esperando tu credencial…';
     input.setAttribute('inputmode','none');
@@ -800,7 +814,7 @@ function scannerTools(root,a,reload){
     }
     mesa.addEventListener('click',()=>setTimeout(enfocarLector,0));
     enfocarLector();
-    const salir=()=>{stopCamera();action(async()=>{await signOut(auth);mesa.remove()})};
+    const salir=()=>{continuarCamara=false;idle();action(async()=>{await signOut(auth);mesa.remove()})};
     mesa.querySelector('.puesto-top button').onclick=salir;mesa.oncancel=e=>{e.preventDefault()};
   };
   let esperaPuesto;
@@ -847,12 +861,15 @@ function scannerTools(root,a,reload){
       const actividad={id:a.id,fecha:a.fecha,titulo:a.titulo,horas:a.horas,categoria:a.categoria};
       try{localStorage.setItem(key,JSON.stringify({actividad,person:person.id}))}catch{throw Error('No se guardó la asistencia. Revisa el espacio disponible en este dispositivo.')}
       mostrarResultado(person.nombre+' · Guardado en este dispositivo. Pendiente de subir.','aviso');
-      estadoCola();await sincronizarEscaneos();
+      estadoCola();
+      if(puesto)sincronizarEscaneos().catch(report);else await sincronizarEscaneos();
     }catch(e){mostrarResultado(e.message,'aviso')}
     finally{revisandoGafete=false;if(root.closest('.mesa-entrada'))lector.querySelector('input').focus({preventScroll:true})}
   }
   start.onclick=async()=>{
     idle();const version=cameraVersion;
+    continuarCamara=!!root.closest('.mesa-entrada');
+    estadoCamara('Conectando cámara…');
     start.disabled=file.disabled=true;stop.hidden=false;
     try{
       await cargarQR('jsQR');
@@ -861,6 +878,9 @@ function scannerTools(root,a,reload){
       const media=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});
       if(version!==cameraVersion||!video.isConnected){media.getTracks().forEach(t=>t.stop());return}
       stream=media;video.srcObject=media;video.hidden=false;await video.play();
+      if(version!==cameraVersion)return;
+      estadoCamara('Cámara encendida · Lista para leer');
+      media.getVideoTracks()[0]?.addEventListener('ended',()=>{if(version===cameraVersion){idle();estadoCamara('Cámara desconectada · Toca Activar cámara')}},{once:true});
       result.textContent='Centra el QR. Al confirmar el nombre, acerca el siguiente gafete.';
       const c=document.createElement('canvas'),ctx=c.getContext('2d',{willReadFrequently:true});let last=0;
       let previousCode='',lastSeen=0;
@@ -882,9 +902,9 @@ function scannerTools(root,a,reload){
         if(version===cameraVersion)frame=requestAnimationFrame(tick);
       }
       frame=requestAnimationFrame(tick);
-    }catch(e){if(version===cameraVersion){idle();result.textContent=e.message?.includes('módulo QR')?e.message:'No se pudo usar la cámara. Revisa el permiso del navegador o pulsa Leer imagen del QR.'}}
+    }catch(e){if(version===cameraVersion){idle();continuarCamara=false;estadoCamara('Cámara no disponible · Usa el lector o vuelve a activarla');result.textContent=e.message?.includes('módulo QR')?e.message:'No se pudo usar la cámara. Revisa el permiso del navegador o pulsa Leer imagen del QR.'}}
   };
-  stop.onclick=idle;
+  stop.onclick=()=>{continuarCamara=false;idle();estadoCamara('Cámara pausada · Toca Activar cámara')};
   file.onchange=async()=>{
     const image=file.files[0];file.value='';if(!image)return;idle();const version=cameraVersion;
     start.disabled=file.disabled=true;
@@ -892,7 +912,14 @@ function scannerTools(root,a,reload){
     catch(e){result.textContent=e.message}
     finally{if(version===cameraVersion)start.disabled=file.disabled=false}
   };
-  document.onvisibilitychange=()=>{if(document.hidden&&video.isConnected&&(stream||!stop.hidden))idle()};
+  document.onvisibilitychange=()=>{
+    if(!video.isConnected)return;
+    if(document.hidden&&(stream||!stop.hidden)){
+      idle();estadoCamara('Cámara en pausa');
+    }else if(!document.hidden&&continuarCamara&&root.closest('.mesa-entrada[open]')&&!stream&&!start.disabled){
+      start.click();
+    }
+  };
 }
 function identidadLista(p){
   return '<div class="identidad-lista">'+avatar(p)+'<div><strong>'+escape(p.nombre)+'</strong><small>'+escape(p.usuario||'')+'</small></div></div>';
