@@ -5,7 +5,7 @@
 <details id="register"><summary>Crear acceso de participante con correo</summary>
 <form method="post" id="signupForm"><p>Verifica tu correo para vincular un expediente.</p>
 <label>Correo<input type="email" name="email" autocomplete="email" required></label><label>Contraseña (mínimo 10 caracteres)<input name="password" type="password" minlength="10" autocomplete="new-password" required></label>
-<button disabled>Crear mi acceso con correo</button></form></details></div></section><section id="account" hidden><button id="logout" class="light">Cerrar sesión</button><div id="content"></div></section><p id="notice" role="status" aria-live="polite"></p></main><details class="privacy"><summary>Aviso de privacidad del programa</summary><p>El IMJU Escuinapa usa los datos de tu expediente para gestionar el gafete, la asistencia y las horas del programa. Para solicitar una corrección, contacta a coordinación.</p></details><footer>Instituto Municipal de la Juventud · Escuinapa</footer><script>
+<button disabled>Crear mi acceso con correo</button></form></details></div></section><section id="account" hidden><button type="button" class="light" id="abrirClave" hidden>Cambiar mi contraseña</button><dialog class="decision" id="claveDialogo" aria-labelledby="claveTitulo"><form method="dialog" id="claveForm"><h3 id="claveTitulo">Cambiar mi contraseña</h3><label>Contraseña actual<input type="password" name="actual" autocomplete="current-password" required></label><label>Nueva contraseña (mínimo 10 caracteres)<input type="password" name="nueva" autocomplete="new-password" minlength="10" required></label><label>Repite la nueva contraseña<input type="password" name="repetir" autocomplete="new-password" minlength="10" required></label><p role="status" id="claveEstado"></p><div class="quick"><button type="button" id="cancelarClave" class="light">Cancelar</button><button type="submit" name="guardar">Guardar contraseña</button></div></form></dialog><button id="logout" class="light">Cerrar sesión</button><div id="content"></div></section><p id="notice" role="status" aria-live="polite"></p></main><details class="privacy"><summary>Aviso de privacidad del programa</summary><p>El IMJU Escuinapa usa los datos de tu expediente para gestionar el gafete, la asistencia y las horas del programa. Para solicitar una corrección, contacta a coordinación.</p></details><footer>Instituto Municipal de la Juventud · Escuinapa</footer><script>
 if(new URLSearchParams(location.search).has('preparar')){
   const aviso=document.getElementById('preparacion');
   aviso.hidden=false;aviso.textContent='Preparando el portal en este navegador… Mantén el Wi-Fi conectado.';
@@ -26,7 +26,7 @@ const estado=document.getElementById('conexion'),reintentar=document.getElementB
 function indicar(mensaje){estado.textContent=mensaje;reintentar.hidden=false;document.getElementById('modoMovil').hidden=new URLSearchParams(location.search).get('red')==='movil'}
 reintentar.onclick=()=>location.reload();
 const espera=setTimeout(()=>indicar('La conexión está tardando. Puedes esperar o volver a intentar.'),10000);
-import('./portal.js?v=eventos15').then(()=>{
+import('./portal.js?v=clave17').then(()=>{
   clearTimeout(espera);estado.hidden=reintentar.hidden=document.getElementById('modoMovil').hidden=true;
   document.querySelectorAll('#login form button[type="submit"],#login form button:not([type])').forEach(b=>b.disabled=false);
 }).catch(()=>{

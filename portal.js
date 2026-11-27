@@ -38,15 +38,51 @@ function snapshot(s){return s.docs.map(d=>({...d.data(),id:d.id}))}
 function sum(rs){return rs.reduce((n,r)=>n+(r.estado==='presente'?Number(r.horas):0),0)}
 accountForms(auth,form,notice);
 form('loginForm',async d=>{await signInWithEmailAndPassword(auth,d.user.trim().toLowerCase()+(d.user.includes('@')?'':dominioUsuario),d.pass);el('loginForm').reset()});
+const claveDialogo=el('claveDialogo'),claveForm=el('claveForm'),abrirClave=el('abrirClave');
+function cerrarCambioClave(){
+  if(claveDialogo.open)claveDialogo.close();
+  claveForm.reset();
+  el('claveEstado').textContent='';
+}
+abrirClave.onclick=()=>{
+  if(!auth.currentUser||!access?.listo)return;
+  claveDialogo.showModal();
+  claveForm.elements.actual.focus();
+};
+el('cancelarClave').onclick=cerrarCambioClave;
+claveDialogo.onclose=()=>{claveForm.reset();el('claveEstado').textContent=''};
+claveDialogo.oncancel=e=>{if(claveForm.elements.guardar.disabled)e.preventDefault()};
+claveForm.onsubmit=async e=>{
+  e.preventDefault();
+  const {actual,nueva,repetir,guardar}=claveForm.elements;
+  const estado=el('claveEstado'),user=auth.currentUser;
+  if(guardar.disabled||!user?.email)return;
+  if(nueva.value!==repetir.value){estado.textContent='Las contraseñas nuevas deben coincidir.';repetir.focus();return}
+  if(actual.value===nueva.value){estado.textContent='Elige una contraseña diferente de la actual.';nueva.focus();return}
+  guardar.disabled=el('cancelarClave').disabled=true;
+  estado.textContent='Guardando tu contraseña…';
+  const nuevaClave=nueva.value;
+  try{
+    const sesion=await signInWithEmailAndPassword(auth,user.email,actual.value);
+    if(sesion.user.uid!==user.uid||auth.currentUser?.uid!==user.uid)throw Error();
+    await updatePassword(sesion.user,nuevaClave);
+    cerrarCambioClave();
+    notice('Contraseña actualizada. En tu próximo ingreso usa tu mismo usuario y la nueva contraseña.');
+  }catch(error){
+    const mensajes={'auth/invalid-credential':'Revisa tu contraseña actual.','auth/wrong-password':'Revisa tu contraseña actual.','auth/too-many-requests':'Hubo demasiados intentos. Espera antes de volver a probar.','auth/network-request-failed':'Revisa tu conexión y vuelve a intentar.','auth/weak-password':'Elige una contraseña más segura.','auth/password-does-not-meet-requirements':'Elige una contraseña más segura.'};
+    estado.textContent=mensajes[error.code]||'No se pudo confirmar el cambio. Vuelve a intentarlo.';
+  }finally{guardar.disabled=el('cancelarClave').disabled=false}
+};
 el('logout').onclick=()=>{if(guard())action(()=>signOut(auth))};
 
-onAuthStateChanged(auth,user=>{revision++;page='inicio';profileId='';directoryQuery='';dirty=false;lastScan='';selectedEvent='';stopCamera();content.replaceChildren();people=[];activities=[];records=[];access=null;notice('');el('login').hidden=!!user;el('account').hidden=!user;if(user){content.innerHTML='<p role="status" class="card">Cargando tu panel…</p>'+(redMovil?'':'<a href="'+escape(enlace('./?red=movil'))+'">¿Tarda en abrir? Probar conexión móvil</a>');action(async()=>{try{await load(user)}catch(err){if(auth.currentUser?.uid===user.uid){content.innerHTML='<button id="retry">Volver a cargar mi panel</button>'+(redMovil?'':'<a href="'+escape(enlace('./?red=movil'))+'">Probar conexión móvil</a>');el('retry').onclick=()=>action(()=>load(user))}throw err}})}});
+onAuthStateChanged(auth,user=>{cerrarCambioClave();abrirClave.hidden=true;revision++;page='inicio';profileId='';directoryQuery='';dirty=false;lastScan='';selectedEvent='';stopCamera();content.replaceChildren();people=[];activities=[];records=[];access=null;notice('');el('login').hidden=!!user;el('account').hidden=!user;if(user){content.innerHTML='<p role="status" class="card">Cargando tu panel…</p>'+(redMovil?'':'<a href="'+escape(enlace('./?red=movil'))+'">¿Tarda en abrir? Probar conexión móvil</a>');action(async()=>{try{await load(user)}catch(err){if(auth.currentUser?.uid===user.uid){content.innerHTML='<button id="retry">Volver a cargar mi panel</button>'+(redMovil?'':'<a href="'+escape(enlace('./?red=movil'))+'">Probar conexión móvil</a>');el('retry').onclick=()=>action(()=>load(user))}throw err}})}});
 async function load(user){
  const seq=++revision;stopCamera();const s=await getDoc(doc(espacio(db),'accesos',user.uid));if(seq!==revision)return;
  if(!s.exists()){awaitActivation({user,db,content,notice,action,refresh:()=>load(user)});return}
  if(!s.data().activo)throw Error('Solicita a coordinación la activación de tu cuenta.');
  access=s.data();
  if(!access.listo){content.innerHTML='<form id="rotate"><h2>Elige tu contraseña personal</h2>'+field('Nueva contraseña (mínimo 10 caracteres)','a','password','minlength="10" autocomplete="new-password"')+field('Repite la contraseña','b','password','autocomplete="new-password"')+'<button>Guardar y entrar</button></form>';form('rotate',async d=>{if(d.a!==d.b)throw Error('Las contraseñas deben coincidir.');await updatePassword(user,d.a);await updateDoc(s.ref,{listo:true});await load(user)});return}
+ abrirClave.hidden=false;
  const admin=access.participante==='ADMIN';
  const [list,agenda]=await Promise.all([admin?getDocs(collection(espacio(db),'participantes')).then(snapshot):getDoc(doc(espacio(db),'participantes',access.participante)).then(d=>d.exists()?[{...d.data(),id:d.id}]:[]),getDocs(collection(espacio(db),'actividades')).then(snapshot)]);
  if(seq!==revision)return;
