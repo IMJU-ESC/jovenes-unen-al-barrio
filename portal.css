@@ -365,3 +365,29 @@ body:not([data-marca]) #login nav a:first-child,body[data-marca=mujer] #login na
     .task-grid button:hover{transform:translateY(-2px);box-shadow:0 5px 12px #243c4624}
   }
 }
+
+@media screen {
+ .mesa-entrada{padding:0;background:linear-gradient(150deg,var(--wash),#fff 65%);color:var(--ink)}
+ .puesto-top{position:static;display:flex;justify-content:space-between;align-items:center;gap:12px;padding:8px clamp(14px,4vw,60px);border-top:4px solid var(--tone);background:white}
+ .puesto-top strong{color:var(--deep)}
+ .puesto-main{width:min(100%,1150px);min-height:0;margin:auto;padding:clamp(16px,4vw,48px);display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-items:start;gap:clamp(16px,3vw,36px)}
+ .puesto-guia{padding:clamp(20px,3.5vw,46px);border-radius:28px;background:linear-gradient(145deg,var(--tone),var(--deep));color:white}
+ .puesto-icono{width:82px;height:82px;display:grid;place-items:center;background:linear-gradient(150deg,white,var(--sky));border-radius:24px;color:var(--deep)}
+ .puesto-icono svg{width:50px;height:50px}
+ .puesto-actividad{font-weight:650;margin-top:22px}
+ .puesto-guia h2{font:750 clamp(2.4rem,4.8vw,4.2rem)/1 system-ui;color:white;letter-spacing:-.05em;margin:12px 0}
+ .puesto-guia p:last-child{font-size:clamp(1.1rem,1.7vw,1.4rem);margin-bottom:0}
+ .mesa-entrada #sessionTools{width:100%;margin:0;display:flex;flex-direction:column;gap:12px}
+ .mesa-entrada .lector-usb{order:-3;margin:0;padding:16px 20px;border:1px solid var(--rim);border-radius:18px}
+ .mesa-entrada #scanResult{order:-2;margin:0;padding:14px 18px;border-radius:16px;background:white;border:1px solid var(--rim);font-weight:650}
+ .mesa-entrada #scanResult[data-tipo=ok]{background:#d9f7e7;color:#124c34}
+ .mesa-entrada #scanResult[data-tipo=aviso]{background:#fff0cc;color:#684100}
+ .mesa-entrada .scan-station{order:2}
+ .mesa-entrada :is(button,.action-link){min-height:52px;touch-action:manipulation}
+ .mesa-entrada .decision{width:min(92vw,530px);text-align:center}
+ .mesa-entrada .decision h4{font-size:clamp(1.6rem,3vw,2.3rem)}
+ .mesa-entrada .decision .avatar{width:100px;height:100px;margin-inline:auto}
+ .mesa-entrada .decision .quick{display:grid;grid-template-columns:1fr}
+ .mesa-entrada .decision [type=submit]{grid-row:1;font-size:1.2rem}
+ @media(max-width:740px){.puesto-main{grid-template-columns:1fr}.puesto-icono{float:right;width:54px;height:54px}.puesto-icono svg{width:32px;height:32px}.puesto-guia h2{clear:both}.puesto-actividad{margin:0}}
+}

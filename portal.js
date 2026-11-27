@@ -639,7 +639,7 @@ function solicitar(root,titulo,contenido,texto,leer){
       done=true;observer.disconnect();document.removeEventListener('visibilitychange',hidden);
       if(box.open)box.close();box.remove();resolve(value);
     }
-    function hidden(){if(document.hidden&&texto==='Confirmar asistencia')finish(null)}
+    function hidden(){if(document.hidden&&['Confirmar asistencia','Confirmar mi asistencia'].includes(texto))finish(null)}
     const observer=new MutationObserver(()=>{if(!box.isConnected)finish(null)});
     observer.observe(content,{childList:true,subtree:true});
     document.addEventListener('visibilitychange',hidden);
@@ -788,17 +788,37 @@ function scannerTools(root,a,reload){
   lector.onsubmit=async e=>{e.preventDefault();if(leyendo)return;leyendo=true;const input=lector.querySelector('input'),code=input.value.trim();input.value='';try{if(code)await register(code)}finally{leyendo=false;input.focus()}};
   barra.querySelector('.station-open').onclick=()=>{
     const mesa=document.createElement('dialog');mesa.className='mesa-entrada';
-    mesa.innerHTML='<div class="mesa-head"><h2>Recepción de gafetes</h2><button type="button" class="light">Cerrar puesto y sesión</button></div><p></p>';
-    mesa.querySelector('p').textContent=a.titulo+' · '+fullDate(a.fecha);
-    document.body.append(mesa);mesa.append(root);mesa.showModal();lector.querySelector('input').focus();
+    mesa.setAttribute('aria-labelledby','puestoTitulo');
+    mesa.innerHTML='<header class="puesto-top"><strong>Recepción de asistencia</strong><button type="button" class="light">Cerrar puesto y sesión</button></header><main class="puesto-main"><section class="puesto-guia"><div class="puesto-icono" aria-hidden="true">'+icon('qr')+'</div><p class="puesto-actividad">'+escape(a.titulo)+' · '+escape(fullDate(a.fecha))+'</p><h2 id="puestoTitulo">Pasa tu credencial</h2><p>Acerca el código QR de tu gafete al lector. Cuando aparezca tu nombre, toca <strong>Confirmar mi asistencia</strong>.</p></section></main>';
+    document.body.append(mesa);mesa.querySelector('main').append(root);mesa.showModal();
+    const input=lector.querySelector('input');
+    input.placeholder='Esperando tu credencial…';
+    input.setAttribute('inputmode','none');
+    lector.querySelector('label').firstChild.textContent='Lector de credenciales';
+    function enfocarLector(){
+      if(mesa.open&&!mesa.querySelector('dialog[open]'))input.focus({preventScroll:true});
+    }
+    mesa.addEventListener('click',()=>setTimeout(enfocarLector,0));
+    enfocarLector();
     const salir=()=>{stopCamera();action(async()=>{await signOut(auth);mesa.remove()})};
-    mesa.querySelector('.mesa-head button').onclick=salir;mesa.oncancel=e=>{e.preventDefault()};
+    mesa.querySelector('.puesto-top button').onclick=salir;mesa.oncancel=e=>{e.preventDefault()};
   };
+  let esperaPuesto;
+  function mostrarResultado(texto,tipo){
+    result.textContent=texto;
+    if(!root.closest('.mesa-entrada'))return;
+    clearTimeout(esperaPuesto);
+    result.dataset.tipo=tipo;
+    esperaPuesto=setTimeout(()=>{
+      result.textContent='Listo para el siguiente gafete.';
+      delete result.dataset.tipo;
+    },9000);
+  }
   const actualizar=e=>{
     if(!root.isConnected||!auth.currentUser){window.removeEventListener('jub-sync',actualizar);return}
     estadoCola();if(e.detail.evento!==a.id)return;
     const persona=people.find(p=>p.id===e.detail.person);
-    result.textContent=(persona?.nombre||'Registro')+' · '+e.detail.estado;
+    mostrarResultado((persona?.nombre||'Registro')+' · '+e.detail.estado,['Asistencia guardada','Presente'].includes(e.detail.estado)?'ok':'aviso');
     if(!root.closest('.mesa-entrada'))pendingAttendance(root,a,reload);
   };
   window.addEventListener('jub-sync',actualizar);
@@ -811,20 +831,25 @@ function scannerTools(root,a,reload){
   cargarQR('jsQR').then(()=>{if(result.isConnected&&!lastScan&&!stream)result.textContent='Escáner listo. Puedes seguir en esta pantalla si pierdes señal.'}).catch(()=>{if(result.isConnected)result.textContent='Activa la cámara con conexión para preparar el lector QR.'});
   if(lastScan)start.textContent='Escanear siguiente joven';
   function idle(){stopCamera();video.srcObject=null;video.hidden=true;stop.hidden=true;start.disabled=false;file.disabled=false}
+  let revisandoGafete=false;
   async function register(code){
+    if(revisandoGafete)return;
+    revisandoGafete=true;
     try{
       const person=code.startsWith(prefijoQR)&&people.find(p=>p.id===code.slice(prefijoQR.length)&&p.activo);
       if(!person)throw Error('El QR no corresponde a un participante activo.');
       
       const version=cameraVersion;
-      const confirmed=await solicitar(root,'Confirmar asistencia',avatar(person)+'<h4>'+escape(person.nombre)+'</h4><p>Usuario · '+escape(person.usuario)+'</p><p>'+escape(a.titulo)+' · '+escape(fullDate(a.fecha))+' · '+escape(a.horas)+' h</p>','Confirmar asistencia',()=>true);
-      if(!confirmed||!root.isConnected||version!==cameraVersion){result.textContent='Lectura cancelada.';return}
+      const puesto=!!root.closest('.mesa-entrada');
+      const confirmed=await solicitar(root,puesto?'¿Este es tu gafete?':'Confirmar asistencia',avatar(person)+'<h4>'+escape(person.nombre)+'</h4><p>Usuario · '+escape(person.usuario)+'</p><p>'+escape(a.titulo)+' · '+escape(fullDate(a.fecha))+' · '+escape(a.horas)+' h</p>',puesto?'Confirmar mi asistencia':'Confirmar asistencia',()=>true);
+      if(!confirmed||!root.isConnected||version!==cameraVersion){mostrarResultado('Lectura cancelada. Puedes volver a pasar tu gafete.','aviso');return}
       const key=colaPrefijo()+encodeURIComponent(a.id)+':'+encodeURIComponent(person.id);
       const actividad={id:a.id,fecha:a.fecha,titulo:a.titulo,horas:a.horas,categoria:a.categoria};
       try{localStorage.setItem(key,JSON.stringify({actividad,person:person.id}))}catch{throw Error('No se guardó la asistencia. Revisa el espacio disponible en este dispositivo.')}
-      result.textContent=person.nombre+' · Guardado en este dispositivo. Pendiente de subir.';
+      mostrarResultado(person.nombre+' · Guardado en este dispositivo. Pendiente de subir.','aviso');
       estadoCola();await sincronizarEscaneos();
-    }catch(e){result.textContent=e.message}
+    }catch(e){mostrarResultado(e.message,'aviso')}
+    finally{revisandoGafete=false;if(root.closest('.mesa-entrada'))lector.querySelector('input').focus({preventScroll:true})}
   }
   start.onclick=async()=>{
     idle();const version=cameraVersion;
